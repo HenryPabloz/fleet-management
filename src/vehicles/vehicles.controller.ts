@@ -1,0 +1,341 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiExtraModels,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+  getSchemaPath,
+} from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
+import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
+import { ErroPadraoDto } from '../common/swagger/erro-padrao.schema';
+import { CreateVehicleDto } from './dto/create-vehicle.dto';
+import { ReplaceVehicleDto } from './dto/replace-vehicle.dto';
+import { UpdateVehicleDto } from './dto/update-vehicle.dto';
+import { VehiclesService } from './vehicles.service';
+
+// Query de paginação comum às rotas de listagem (GET / e GET /deleted/all).
+const QUERY_PAGE = {
+  name: 'page',
+  required: false,
+  type: Number,
+  description: 'Número da página (começa em 1). Padrão: 1.',
+  example: 1,
+};
+const QUERY_PAGE_SIZE = {
+  name: 'pageSize',
+  required: false,
+  type: Number,
+  description: 'Itens por página (1 a 100). Padrão: 20.',
+  example: 20,
+};
+
+// Schema de resposta de um veículo (não existe DTO de resposta neste
+// resource; o service devolve a linha crua do Prisma).
+const VEHICLE_SCHEMA = {
+  type: 'object',
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    plate: { type: 'string', example: 'ABC1D23' },
+    model: { type: 'string', example: 'Fiat Strada' },
+    year: { type: 'integer', example: 2022 },
+    status: {
+      type: 'string',
+      enum: ['AVAILABLE', 'IN_USE', 'IN_MAINTENANCE', 'OUT_OF_SERVICE'],
+      example: 'AVAILABLE',
+    },
+    currentMileage: { type: 'integer', example: 15000 },
+    lastMaintenanceKm: { type: 'integer', example: 10000 },
+    createdAt: { type: 'string', format: 'date-time' },
+    updatedAt: { type: 'string', format: 'date-time' },
+    deletedAt: { type: 'string', format: 'date-time', nullable: true, example: null },
+  },
+};
+
+// Leitura: ADMIN, FLEET_MANAGER e DRIVER (motorista precisa ver quais veículos
+// estão disponíveis). Escrita: só ADMIN e FLEET_MANAGER.
+@ApiTags('vehicles')
+@ApiBearerAuth('jwt')
+@ApiExtraModels(ErroPadraoDto, PaginacaoMetadataDto)
+@Controller('vehicles')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class VehiclesController {
+  constructor(private servicoVehicles: VehiclesService) {}
+
+  @Get()
+  @Roles('ADMIN', 'FLEET_MANAGER', 'DRIVER')
+  @ApiOperation({
+    summary: 'Lista veículos (paginado)',
+    description:
+      'Lista veículos ativos (não removidos), paginado. Acesso: ADMIN, FLEET_MANAGER, DRIVER.\n\n' +
+      '`x-database-tables`: lê `vehicles`.',
+    ...({ 'x-database-tables': { read: ['vehicles'] } } as Record<string, unknown>),
+  })
+  @ApiQuery(QUERY_PAGE)
+  @ApiQuery(QUERY_PAGE_SIZE)
+  @ApiResponse({
+    status: 200,
+    description: 'Página de veículos.',
+    schema: {
+      allOf: [
+        { properties: { data: { type: 'array', items: VEHICLE_SCHEMA } } },
+        { properties: { pagination: { $ref: getSchemaPath(PaginacaoMetadataDto) } } },
+      ],
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  listar(@Query() paginacao: PaginationQueryDto) {
+    return this.servicoVehicles.listar(paginacao.page, paginacao.pageSize);
+  }
+
+  // Precisa vir antes de "GET /:id", senão "deleted" seria lido como um id.
+  @Get('deleted/all')
+  @Roles('ADMIN', 'FLEET_MANAGER')
+  @ApiOperation({
+    summary: 'Lista veículos removidos (soft delete), paginado',
+    description:
+      'Lista veículos já removidos logicamente (deletedAt preenchido), paginado. Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      '`x-database-tables`: lê `vehicles`.',
+    ...({ 'x-database-tables': { read: ['vehicles'] } } as Record<string, unknown>),
+  })
+  @ApiQuery(QUERY_PAGE)
+  @ApiQuery(QUERY_PAGE_SIZE)
+  @ApiResponse({
+    status: 200,
+    description: 'Página de veículos removidos.',
+    schema: {
+      allOf: [
+        { properties: { data: { type: 'array', items: VEHICLE_SCHEMA } } },
+        { properties: { pagination: { $ref: getSchemaPath(PaginacaoMetadataDto) } } },
+      ],
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  listarRemovidos(@Query() paginacao: PaginationQueryDto) {
+    return this.servicoVehicles.listarRemovidos(
+      paginacao.page,
+      paginacao.pageSize,
+    );
+  }
+
+  @Get(':id')
+  @Roles('ADMIN', 'FLEET_MANAGER', 'DRIVER')
+  @ApiOperation({
+    summary: 'Busca um veículo por id',
+    description:
+      'Busca um veículo ativo pelo id. Acesso: ADMIN, FLEET_MANAGER, DRIVER.\n\n' +
+      '`x-database-tables`: lê `vehicles`.',
+    ...({ 'x-database-tables': { read: ['vehicles'] } } as Record<string, unknown>),
+  })
+  @ApiParam({ name: 'id', description: 'Id do veículo (UUID).', format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Veículo encontrado.', schema: VEHICLE_SCHEMA })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 404, description: 'Veículo não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  buscarPorId(@Param('id', ParseUUIDPipe) id: string) {
+    return this.servicoVehicles.buscarPorId(id);
+  }
+
+  @Post()
+  @Roles('ADMIN', 'FLEET_MANAGER')
+  @HttpCode(201)
+  @ApiOperation({
+    summary: 'Cria um veículo',
+    description:
+      'Cria um veículo novo. `status` aceita apenas `AVAILABLE`, `IN_MAINTENANCE` ou ' +
+      '`OUT_OF_SERVICE` (padrão: `AVAILABLE`) — `IN_USE` nunca é aceito via API, esse status ' +
+      'só é setado pelas procedures de viagem (`start_trip`) quando o veículo entra em uso. ' +
+      'A placa é única. Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      '`x-database-tables`: lê `vehicles` (checa placa duplicada); escreve em `vehicles`.',
+    ...({
+      'x-database-tables': { read: ['vehicles'], write: ['vehicles'] },
+    } as Record<string, unknown>),
+  })
+  @ApiBody({ type: CreateVehicleDto })
+  @ApiResponse({ status: 201, description: 'Veículo criado.', schema: VEHICLE_SCHEMA })
+  @ApiResponse({
+    status: 400,
+    description: 'Corpo inválido (ex: ano fora do intervalo, placa fora do padrão) ou violação de CHECK do banco.',
+    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+  })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 409, description: 'Placa já cadastrada.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  criar(@Body() dados: CreateVehicleDto) {
+    return this.servicoVehicles.criar(dados);
+  }
+
+  @Patch(':id')
+  @Roles('ADMIN', 'FLEET_MANAGER')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Atualiza parcialmente um veículo',
+    description:
+      'Atualiza só os campos enviados (model, year, status, currentMileage, lastMaintenanceKm). ' +
+      '`plate` não entra aqui, a placa não muda depois de criada. `status` nunca aceita `IN_USE` ' +
+      'via API (só as procedures de viagem setam esse status); um trigger do banco bloqueia essa ' +
+      'escrita direta. Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      '`x-database-tables`: lê `vehicles`; escreve em `vehicles`.',
+    ...({
+      'x-database-tables': { read: ['vehicles'], write: ['vehicles'] },
+    } as Record<string, unknown>),
+  })
+  @ApiParam({ name: 'id', description: 'Id do veículo (UUID).', format: 'uuid' })
+  @ApiBody({ type: UpdateVehicleDto })
+  @ApiResponse({ status: 200, description: 'Veículo atualizado.', schema: VEHICLE_SCHEMA })
+  @ApiResponse({ status: 400, description: 'Corpo inválido ou violação de CHECK do banco.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 404, description: 'Veículo não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({
+    status: 409,
+    description: 'Tentativa de setar `status: IN_USE` direto, quilometragem menor que a atual, ou veículo com viagem ativa.',
+    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+  })
+  atualizarParcial(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dados: UpdateVehicleDto,
+  ) {
+    return this.servicoVehicles.atualizarParcial(id, dados);
+  }
+
+  @Put(':id')
+  @Roles('ADMIN', 'FLEET_MANAGER')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Substitui um veículo',
+    description:
+      'Substitui todos os campos editáveis (model, year, status, currentMileage, ' +
+      'lastMaintenanceKm são obrigatórios). `plate` não entra aqui, a placa não muda depois de ' +
+      'criada. `status` nunca aceita `IN_USE` via API (mesma regra do PATCH). Acesso: ADMIN, ' +
+      'FLEET_MANAGER.\n\n' +
+      '`x-database-tables`: lê `vehicles`; escreve em `vehicles`.',
+    ...({
+      'x-database-tables': { read: ['vehicles'], write: ['vehicles'] },
+    } as Record<string, unknown>),
+  })
+  @ApiParam({ name: 'id', description: 'Id do veículo (UUID).', format: 'uuid' })
+  @ApiBody({ type: ReplaceVehicleDto })
+  @ApiResponse({ status: 200, description: 'Veículo substituído.', schema: VEHICLE_SCHEMA })
+  @ApiResponse({ status: 400, description: 'Corpo inválido ou violação de CHECK do banco.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 404, description: 'Veículo não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({
+    status: 409,
+    description: 'Tentativa de setar `status: IN_USE` direto, quilometragem menor que a atual, ou veículo com viagem ativa.',
+    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+  })
+  substituir(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dados: ReplaceVehicleDto,
+  ) {
+    return this.servicoVehicles.substituir(id, dados);
+  }
+
+  @Delete(':id')
+  @Roles('ADMIN', 'FLEET_MANAGER')
+  @HttpCode(204)
+  @ApiOperation({
+    summary: 'Remove um veículo (soft delete)',
+    description:
+      'Marca `deletedAt` no veículo; a linha continua no banco e pode ser restaurada em ' +
+      '`PATCH /vehicles/:id/restore`. Bloqueado se o veículo estiver com status `IN_USE` ' +
+      '(viagem ativa). Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      '`x-database-tables`: lê `vehicles`; escreve em `vehicles`.',
+    ...({
+      'x-database-tables': { read: ['vehicles'], write: ['vehicles'] },
+    } as Record<string, unknown>),
+  })
+  @ApiParam({ name: 'id', description: 'Id do veículo (UUID).', format: 'uuid' })
+  @ApiResponse({ status: 204, description: 'Veículo removido (sem corpo de resposta).' })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 404, description: 'Veículo não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 409, description: 'Veículo está em uso (viagem ativa); não pode ser removido.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  async remover(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    await this.servicoVehicles.remover(id);
+  }
+
+  @Patch(':id/restore')
+  @Roles('ADMIN', 'FLEET_MANAGER')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Restaura um veículo removido',
+    description:
+      'Limpa `deletedAt`, revertendo o soft delete. Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      '`x-database-tables`: lê `vehicles`; escreve em `vehicles`.',
+    ...({
+      'x-database-tables': { read: ['vehicles'], write: ['vehicles'] },
+    } as Record<string, unknown>),
+  })
+  @ApiParam({ name: 'id', description: 'Id do veículo (UUID).', format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Veículo restaurado.', schema: VEHICLE_SCHEMA })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 404, description: 'Veículo não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  restaurar(@Param('id', ParseUUIDPipe) id: string) {
+    return this.servicoVehicles.restaurar(id);
+  }
+
+  // Irreversível: apaga a linha de verdade do banco (hard delete).
+  @Delete(':id/permanent')
+  @Roles('ADMIN', 'FLEET_MANAGER')
+  @HttpCode(204)
+  @ApiOperation({
+    summary: 'Remove um veículo permanentemente (hard delete)',
+    description:
+      'Apaga a linha de verdade do banco — irreversível, diferente do `DELETE /vehicles/:id` ' +
+      '(soft delete). Bloqueado se existir viagem, abastecimento, manutenção ou incidente ' +
+      'associado ao veículo (a FK não tem ON DELETE CASCADE). Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      '`x-database-tables`: lê `vehicles`, `trips`, `refuelings`, `maintenances`, `incidents`; ' +
+      'escreve (apaga) em `vehicles`.',
+    ...({
+      'x-database-tables': {
+        read: ['vehicles', 'trips', 'refuelings', 'maintenances', 'incidents'],
+        write: ['vehicles'],
+      },
+    } as Record<string, unknown>),
+  })
+  @ApiParam({ name: 'id', description: 'Id do veículo (UUID).', format: 'uuid' })
+  @ApiResponse({ status: 204, description: 'Veículo apagado definitivamente (sem corpo de resposta).' })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 404, description: 'Veículo não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({
+    status: 409,
+    description: 'Veículo tem viagens, abastecimentos, manutenções ou incidentes associados.',
+    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+  })
+  async removerPermanentemente(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    await this.servicoVehicles.removerPermanentemente(id);
+  }
+}
