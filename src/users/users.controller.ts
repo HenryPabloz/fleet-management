@@ -26,6 +26,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { NomePipe } from '../common/pipes/name-pipe';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
 import { ErroPadraoDto } from '../common/swagger/erro-padrao.schema';
@@ -162,7 +163,11 @@ export class UsersController {
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
   @ApiResponse({ status: 409, description: 'E-mail já cadastrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  criar(@Body() dados: CreateUserDto) {
+  criar(
+    @Body() dados: CreateUserDto,
+    // Roda separado só pela validação; os dados de verdade vêm de dados.
+    @Body('fullName', NomePipe) _fullName: string,
+  ) {
     return this.servicoUsers.criar(dados);
   }
 
@@ -188,6 +193,8 @@ export class UsersController {
   atualizarParcial(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dados: UpdateUserDto,
+    // fullName é opcional no PATCH; o NomePipe deixa passar quando não vem.
+    @Body('fullName', NomePipe) _fullName: string | undefined,
   ) {
     return this.servicoUsers.atualizarParcial(id, dados);
   }
@@ -215,6 +222,8 @@ export class UsersController {
   substituir(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dados: ReplaceUserDto,
+    // Roda separado só pela validação; os dados de verdade vêm de dados.
+    @Body('fullName', NomePipe) _fullName: string,
   ) {
     return this.servicoUsers.substituir(id, dados);
   }

@@ -90,7 +90,7 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
         .send({
           email: novoEmail(),
           password: SENHA,
-          fullName: 'Usuario E2E Soft Delete',
+          fullName: 'Usuario Teste Soft Delete',
           roleId: roleIdDriver,
         })
         .expect(201);
@@ -174,7 +174,7 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
         .send({
           email: novoEmail(),
           password: SENHA,
-          fullName: 'Motorista E2E Soft Delete',
+          fullName: 'Motorista Teste Soft Delete',
           roleId: roleIdDriver,
         })
         .expect(201);
@@ -255,7 +255,7 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
         .send({
           email: novoEmail(),
           password: SENHA,
-          fullName: 'Usuario E2E Correcoes QA',
+          fullName: 'Usuario Teste Correcoes QA',
           roleId: roleIdDriver,
         })
         .expect(201);
@@ -330,7 +330,7 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
         .send({
           email: novoEmail(),
           password: SENHA,
-          fullName: 'Usuario E2E Historico Trip',
+          fullName: 'Usuario Teste Historico Trip',
           roleId: roleIdDriver,
         })
         .expect(201);
@@ -341,7 +341,7 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
         .send({
           email: novoEmail(),
           password: SENHA,
-          fullName: 'Motorista E2E Historico Trip',
+          fullName: 'Motorista Teste Historico Trip',
           roleId: roleIdDriver,
         })
         .expect(201);

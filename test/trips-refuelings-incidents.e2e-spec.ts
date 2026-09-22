@@ -71,7 +71,7 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
       .send({
         email: novoEmail(),
         password: SENHA,
-        fullName: 'Motorista E2E Trip',
+        fullName: 'Motorista Teste Trip',
         roleId: roleIdDriver,
       })
       .expect(201);

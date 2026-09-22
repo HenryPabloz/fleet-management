@@ -18,6 +18,7 @@ import {
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { ErroPadraoDto } from '../common/swagger/erro-padrao.schema';
+import { NomePipe } from '../common/pipes/name-pipe';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { LoginResponseDto } from './dto/login-response.dto';
@@ -63,7 +64,11 @@ export class AuthController {
     description: 'E-mail já cadastrado.',
     schema: { $ref: getSchemaPath(ErroPadraoDto) },
   })
-  async signup(@Body() dadosCadastro: SignupDto): Promise<SignupResponseDto> {
+  async signup(
+    @Body() dadosCadastro: SignupDto,
+    // Roda separado só pela validação; os dados de verdade vêm de dadosCadastro.
+    @Body('fullName', NomePipe) _fullName: string,
+  ): Promise<SignupResponseDto> {
     return this.servicoAuth.signup(dadosCadastro);
   }
 

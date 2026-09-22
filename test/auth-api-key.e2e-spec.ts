@@ -32,7 +32,7 @@ describe('Auth com X-API-KEY (e2e)', () => {
   function cadastrar(email: string) {
     return request(app.getHttpServer())
       .post('/auth/signup')
-      .send({ email, password: SENHA, fullName: 'Usuario E2E' });
+      .send({ email, password: SENHA, fullName: 'Usuario Teste' });
   }
 
   function entrar(chave: string | undefined, corpo: object) {
@@ -132,7 +132,7 @@ describe('Auth com X-API-KEY (e2e)', () => {
       const corpoBom = {
         email: novoEmail(),
         password: SENHA,
-        fullName: 'Usuario E2E',
+        fullName: 'Usuario Teste',
       };
 
       await servidor

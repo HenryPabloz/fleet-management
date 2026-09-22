@@ -110,7 +110,7 @@ describe('Vehicles e Maintenances (e2e)', () => {
       .send({
         email: novoEmail(),
         password: SENHA,
-        fullName: 'Motorista E2E Vehicles',
+        fullName: 'Motorista Teste Vehicles',
         roleId: roleIdDriver,
       })
       .expect(201);
@@ -283,7 +283,7 @@ describe('Vehicles e Maintenances (e2e)', () => {
         .send({
           email: novoEmail(),
           password: SENHA,
-          fullName: 'Motorista E2E Trip',
+          fullName: 'Motorista Teste Trip',
           roleId: roleIdDriver,
         })
         .expect(201);
