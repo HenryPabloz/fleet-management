@@ -149,7 +149,7 @@ describe('Auth com X-API-KEY (e2e)', () => {
         .expect(400);
       await servidor
         .post('/auth/signup')
-        .send({ ...corpoBom, password: 'a'.repeat(73) })
+        .send({ ...corpoBom, password: 'a'.repeat(16) })
         .expect(400);
       await servidor
         .post('/auth/signup')

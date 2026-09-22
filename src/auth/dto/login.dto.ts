@@ -17,15 +17,15 @@ export class LoginDto {
   @IsEmail()
   email!: string;
 
-  // O bcrypt trunca a senha em 72 bytes; sem limite superior, um payload gigante desperdiça CPU no compare.
+  // Limite de 15 caracteres por decisão do projeto (senha curta, fácil de digitar).
   @ApiProperty({
-    description: 'Senha em texto puro (mín. 8, máx. 72 caracteres).',
+    description: 'Senha em texto puro (mín. 8, máx. 15 caracteres).',
     example: 'SenhaForte123',
     minLength: 8,
-    maxLength: 72,
+    maxLength: 15,
   })
   @IsString()
   @MinLength(8)
-  @MaxLength(72)
+  @MaxLength(15)
   password!: string;
 }
