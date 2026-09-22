@@ -4,6 +4,7 @@ import { useContainer } from 'class-validator';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
+import compression from 'compression';
 import { join } from 'path';
 import { AppModule } from './app.module';
 import { garantirPastaDeUploads } from './incidents/utils/upload-incidents.config';
@@ -12,6 +13,8 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   // Adiciona headers de segurança padrão e desliga o X-Powered-By.
   app.use(helmet());
+  // Comprime as respostas (gzip) quando o cliente aceita.
+  app.use(compression());
 
   // Cria a pasta de uploads se não existir e serve os arquivos em /uploads/*
   // (é assim que a photoUrl de um incidente funciona de verdade).
