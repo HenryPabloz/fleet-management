@@ -10,6 +10,7 @@ import { DatabaseModule } from './database/database.module';
 import { ViaCepModule } from './external/viacep/via-cep.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { PermissionsModule } from './permissions/permissions.module';
 import { DriversModule } from './drivers/drivers.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { MaintenancesModule } from './maintenances/maintenances.module';
@@ -37,6 +38,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
     ViaCepModule,
     AuthModule,
     UsersModule,
+    PermissionsModule,
     DriversModule,
     VehiclesModule,
     MaintenancesModule,

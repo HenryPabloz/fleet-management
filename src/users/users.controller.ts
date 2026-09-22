@@ -26,6 +26,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { NomePipe } from '../common/pipes/name-pipe';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
@@ -146,12 +147,13 @@ export class UsersController {
   }
 
   @Post()
-  @Roles('ADMIN')
+  @Permissions('USER_CREATE')
   @HttpCode(201)
   @ApiOperation({
     summary: 'Cria um usuário',
     description:
-      'Cria um usuário com o papel (`roleId`) informado. Acesso: ADMIN.\n\n' +
+      'Cria um usuário com o papel (`roleId`) informado. Acesso: quem tiver a permissão `USER_CREATE` ' +
+      '(ADMIN tem por papel; outros papéis podem receber via delegação granular em `POST /users/:id/permissions`).\n\n' +
       '`x-database-tables`: lê `users` (checa e-mail duplicado), `roles` (valida roleId); escreve em `users`.',
     ...({
       'x-database-tables': { read: ['users', 'roles'], write: ['users'] },
@@ -172,12 +174,13 @@ export class UsersController {
   }
 
   @Patch(':id')
-  @Roles('ADMIN')
+  @Permissions('USER_UPDATE')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Atualiza parcialmente um usuário',
     description:
-      'Atualiza só os campos enviados (fullName, roleId, isActive). E-mail e senha não entram aqui. Acesso: ADMIN.\n\n' +
+      'Atualiza só os campos enviados (fullName, roleId, isActive). E-mail e senha não entram aqui. ' +
+      'Acesso: quem tiver a permissão `USER_UPDATE` (ADMIN tem por papel; outros papéis podem receber via delegação granular).\n\n' +
       '`x-database-tables`: lê `users`, `roles` (se `roleId` vier); escreve em `users`.',
     ...({
       'x-database-tables': { read: ['users', 'roles'], write: ['users'] },
@@ -200,13 +203,14 @@ export class UsersController {
   }
 
   @Put(':id')
-  @Roles('ADMIN')
+  @Permissions('USER_UPDATE')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Substitui um usuário',
     description:
       'Substitui todos os campos editáveis (fullName, roleId, isActive são obrigatórios). ' +
-      'E-mail e senha não entram aqui. Acesso: ADMIN.\n\n' +
+      'E-mail e senha não entram aqui. Acesso: quem tiver a permissão `USER_UPDATE` (ADMIN tem por papel; ' +
+      'outros papéis podem receber via delegação granular).\n\n' +
       '`x-database-tables`: lê `users`, `roles`; escreve em `users`.',
     ...({
       'x-database-tables': { read: ['users', 'roles'], write: ['users'] },
@@ -229,13 +233,14 @@ export class UsersController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Permissions('USER_DELETE')
   @HttpCode(204)
   @ApiOperation({
     summary: 'Remove um usuário (soft delete)',
     description:
       'Marca `deletedAt` no usuário; a linha continua no banco e pode ser restaurada ' +
-      'em `PATCH /users/:id/restore`. Acesso: ADMIN.\n\n' +
+      'em `PATCH /users/:id/restore`. Acesso: quem tiver a permissão `USER_DELETE` (ADMIN tem por papel; ' +
+      'outros papéis podem receber via delegação granular).\n\n' +
       '`x-database-tables`: lê `users`; escreve em `users`.',
     ...({
       'x-database-tables': { read: ['users'], write: ['users'] },
@@ -252,12 +257,13 @@ export class UsersController {
   }
 
   @Patch(':id/restore')
-  @Roles('ADMIN')
+  @Permissions('USER_DELETE')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Restaura um usuário removido',
     description:
-      'Limpa `deletedAt`, revertendo o soft delete. Acesso: ADMIN.\n\n' +
+      'Limpa `deletedAt`, revertendo o soft delete. Acesso: quem tiver a permissão `USER_DELETE` ' +
+      '(ADMIN tem por papel; outros papéis podem receber via delegação granular).\n\n' +
       '`x-database-tables`: lê `users`; escreve em `users`.',
     ...({
       'x-database-tables': { read: ['users'], write: ['users'] },

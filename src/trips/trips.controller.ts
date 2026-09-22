@@ -25,6 +25,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UsuarioLogado } from '../auth/interfaces/usuario-logado.interface';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
@@ -96,11 +97,12 @@ const ERROS_DE_PROCEDURE_COMUNS =
 // rotas de negócio (start/end/cancel), que chamam as procedures do banco.
 // Editar km/local direto quebraria a garantia de consistência das procedures.
 //
-// Leitura: ADMIN, FLEET_MANAGER e DRIVER (o motorista vê todas as viagens por
-// enquanto, não só as próprias; filtrar "só as próprias" fica como melhoria
-// futura, documentada no relatório). Escrita de negócio (create/start/end/
-// cancel): os 3 papéis também, já que o motorista participa da viagem.
-// DELETE/restore/permanent: só ADMIN (remoção de dados é decisão administrativa).
+// Leitura: quem tiver TRIP_VIEW_OWN ou TRIP_VIEW_ALL (o motorista vê todas as
+// viagens por enquanto, não só as próprias; filtrar "só as próprias" fica como
+// melhoria futura, documentada no relatório). Criação: TRIP_CREATE. Cancelamento:
+// TRIP_CANCEL_OWN. Start/end não têm código de permission no seed, continuam
+// em @Roles. DELETE/restore/permanent: só ADMIN (remoção de dados é decisão
+// administrativa; sem código de permission pra isso).
 @ApiTags('trips')
 @ApiBearerAuth('jwt')
 @ApiExtraModels(ErroPadraoDto, PaginacaoMetadataDto)
@@ -110,7 +112,7 @@ export class TripsController {
   constructor(private servicoTrips: TripsService) {}
 
   @Get()
-  @Roles('ADMIN', 'FLEET_MANAGER', 'DRIVER')
+  @Permissions('TRIP_VIEW_OWN', 'TRIP_VIEW_ALL')
   @ApiOperation({
     summary: 'Lista viagens (paginado)',
     description:
@@ -177,7 +179,7 @@ export class TripsController {
   }
 
   @Get(':id')
-  @Roles('ADMIN', 'FLEET_MANAGER', 'DRIVER')
+  @Permissions('TRIP_VIEW_OWN', 'TRIP_VIEW_ALL')
   @ApiOperation({
     summary: 'Busca uma viagem por id',
     description:
@@ -196,7 +198,7 @@ export class TripsController {
   }
 
   @Post()
-  @Roles('ADMIN', 'FLEET_MANAGER', 'DRIVER')
+  @Permissions('TRIP_CREATE')
   @HttpCode(201)
   @ApiOperation({
     summary: 'Cria uma viagem (PLANNED)',
@@ -313,7 +315,7 @@ export class TripsController {
   }
 
   @Patch(':id/cancel')
-  @Roles('ADMIN', 'FLEET_MANAGER', 'DRIVER')
+  @Permissions('TRIP_CANCEL_OWN')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Cancela uma viagem (PLANNED/IN_PROGRESS -> CANCELLED)',

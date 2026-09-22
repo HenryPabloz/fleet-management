@@ -66,15 +66,23 @@ export class RolesGuard implements CanActivate {
 
     // Verificar permissions
     if (permissoesExigidas && permissoesExigidas.length > 0) {
-      const permissoesDoPapel =
-        await this.servicoPrisma.rolePermission.findMany({
+      // Uma permissão libera o acesso se vier do papel (role) OU tiver sido
+      // concedida individualmente ao usuário (delegação granular).
+      const [permissoesDoPapel, permissoesDoUsuario] = await Promise.all([
+        this.servicoPrisma.rolePermission.findMany({
           where: { roleId: usuario.roleId },
           include: { permission: true },
-        });
+        }),
+        this.servicoPrisma.userPermission.findMany({
+          where: { userId: usuario.userId },
+          include: { permission: true },
+        }),
+      ]);
 
-      const codigosDePermissao = permissoesDoPapel.map(
-        (item) => item.permission.code,
-      );
+      const codigosDePermissao = [
+        ...permissoesDoPapel.map((item) => item.permission.code),
+        ...permissoesDoUsuario.map((item) => item.permission.code),
+      ];
       const temPermissao = permissoesExigidas.some((codigo) =>
         codigosDePermissao.includes(codigo),
       );

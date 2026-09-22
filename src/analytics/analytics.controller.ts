@@ -10,7 +10,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { ErroPadraoDto } from '../common/swagger/erro-padrao.schema';
 import { AnalyticsService } from './analytics.service';
 import { DailyDistanceQueryDto } from './dto/daily-distance-query.dto';
@@ -18,13 +18,14 @@ import { IncidentsSeverityQueryDto } from './dto/incidents-severity-query.dto';
 
 const PADRAO_DE_DIAS = 30;
 
-// Indicadores agregados de frota: só leitura, dado gerencial (ADMIN/FLEET_MANAGER,
-// motorista não enxerga números da frota inteira nem de outros motoristas).
+// Indicadores agregados de frota: só leitura, dado gerencial. Quem tiver
+// ANALYTICS_VIEW acessa (ADMIN e FLEET_MANAGER por papel; motorista não
+// enxerga números da frota inteira nem de outros motoristas por padrão).
 @ApiTags('analytics')
 @ApiBearerAuth('jwt')
 @Controller('analytics')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN', 'FLEET_MANAGER')
+@Permissions('ANALYTICS_VIEW')
 export class AnalyticsController {
   constructor(private servicoAnalytics: AnalyticsService) {}
 

@@ -25,6 +25,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UsuarioLogado } from '../auth/interfaces/usuario-logado.interface';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
@@ -71,9 +72,9 @@ const REFUELING_SCHEMA = {
 };
 
 // Sem PATCH/PUT genérico: abastecimento é registro histórico da procedure
-// register_refueling (ver comentário no service). Leitura e criação: ADMIN,
-// FLEET_MANAGER e DRIVER (motorista registra o próprio abastecimento).
-// Remoção: só ADMIN.
+// register_refueling (ver comentário no service). Leitura: quem tiver
+// REFUELING_VIEW_OWN ou REFUELING_VIEW_ALL. Criação: REFUELING_CREATE
+// (motorista registra o próprio abastecimento). Remoção: só ADMIN.
 @ApiTags('refuelings')
 @ApiBearerAuth('jwt')
 @ApiExtraModels(ErroPadraoDto, PaginacaoMetadataDto)
@@ -83,7 +84,7 @@ export class RefuelingsController {
   constructor(private servicoRefuelings: RefuelingsService) {}
 
   @Get()
-  @Roles('ADMIN', 'FLEET_MANAGER', 'DRIVER')
+  @Permissions('REFUELING_VIEW_OWN', 'REFUELING_VIEW_ALL')
   @ApiOperation({
     summary: 'Lista abastecimentos (paginado)',
     description:
@@ -150,7 +151,7 @@ export class RefuelingsController {
   }
 
   @Get(':id')
-  @Roles('ADMIN', 'FLEET_MANAGER', 'DRIVER')
+  @Permissions('REFUELING_VIEW_OWN', 'REFUELING_VIEW_ALL')
   @ApiOperation({
     summary: 'Busca um abastecimento por id',
     description:
@@ -169,7 +170,7 @@ export class RefuelingsController {
   }
 
   @Post()
-  @Roles('ADMIN', 'FLEET_MANAGER', 'DRIVER')
+  @Permissions('REFUELING_CREATE')
   @HttpCode(201)
   @ApiOperation({
     summary: 'Registra um abastecimento',

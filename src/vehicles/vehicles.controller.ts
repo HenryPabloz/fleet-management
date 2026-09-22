@@ -26,6 +26,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
 import { ErroPadraoDto } from '../common/swagger/erro-padrao.schema';
@@ -111,7 +112,10 @@ const VEHICLE_CREATE_RESPONSE_SCHEMA = {
 };
 
 // Leitura: ADMIN, FLEET_MANAGER e DRIVER (motorista precisa ver quais veículos
-// estão disponíveis). Escrita: só ADMIN e FLEET_MANAGER.
+// estão disponíveis). Continua em @Roles: a permission VEHICLE_VIEW do seed não
+// cobre DRIVER, então trocar quebraria esse acesso — não convertido de propósito.
+// Escrita: quem tiver VEHICLE_CREATE/VEHICLE_UPDATE (ADMIN e FLEET_MANAGER por
+// papel; outros papéis podem receber via delegação).
 @ApiTags('vehicles')
 @ApiBearerAuth('jwt')
 @ApiExtraModels(ErroPadraoDto, PaginacaoMetadataDto)
@@ -205,7 +209,7 @@ export class VehiclesController {
   }
 
   @Post()
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Permissions('VEHICLE_CREATE')
   @HttpCode(201)
   @ApiOperation({
     summary: 'Cria um veículo',
@@ -253,7 +257,7 @@ export class VehiclesController {
   }
 
   @Patch(':id')
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Permissions('VEHICLE_UPDATE')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Atualiza parcialmente um veículo',
@@ -287,7 +291,7 @@ export class VehiclesController {
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Permissions('VEHICLE_UPDATE')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Substitui um veículo',

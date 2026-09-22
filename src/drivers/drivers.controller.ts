@@ -26,6 +26,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
 import { ErroPadraoDto } from '../common/swagger/erro-padrao.schema';
@@ -51,9 +52,9 @@ const QUERY_PAGE_SIZE = {
   example: 20,
 };
 
-// Leitura: ADMIN e FLEET_MANAGER. Escrita: só ADMIN (o gestor de frota não
-// cadastra/edita motorista diretamente; se precisar, é uma decisão de negócio
-// separada, fora do escopo deste resource).
+// Leitura: quem tiver DRIVER_VIEW (ADMIN por papel; FLEET_MANAGER por papel
+// desde a matriz de delegação). Escrita: quem tiver DRIVER_CREATE/DRIVER_UPDATE
+// (ADMIN e FLEET_MANAGER por papel; outros papéis podem receber via delegação).
 @ApiTags('drivers')
 @ApiBearerAuth('jwt')
 @ApiExtraModels(ErroPadraoDto, PaginacaoMetadataDto, DriverRespostaDto)
@@ -63,7 +64,7 @@ export class DriversController {
   constructor(private servicoDrivers: DriversService) {}
 
   @Get()
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Permissions('DRIVER_VIEW')
   @ApiOperation({
     summary: 'Lista motoristas (paginado)',
     description:
@@ -129,7 +130,7 @@ export class DriversController {
   }
 
   @Get(':id')
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Permissions('DRIVER_VIEW')
   @ApiOperation({
     summary: 'Busca um motorista por id',
     description:
@@ -148,13 +149,13 @@ export class DriversController {
   }
 
   @Post()
-  @Roles('ADMIN')
+  @Permissions('DRIVER_CREATE')
   @HttpCode(201)
   @ApiOperation({
     summary: 'Cria um motorista',
     description:
       'Vincula um `User` já existente (não removido) como motorista. Um usuário só pode ter ' +
-      'um motorista, e o número da CNH é único. Acesso: ADMIN.\n\n' +
+      'um motorista, e o número da CNH é único. Acesso: ADMIN, FLEET_MANAGER (via permissão DRIVER_CREATE).\n\n' +
       '`x-database-tables`: lê `users` (valida userId), `drivers` (checa vínculo e CNH duplicados); escreve em `drivers`.',
     ...({
       'x-database-tables': { read: ['users', 'drivers'], write: ['drivers'] },
@@ -179,13 +180,13 @@ export class DriversController {
   }
 
   @Patch(':id')
-  @Roles('ADMIN')
+  @Permissions('DRIVER_UPDATE')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Atualiza parcialmente um motorista',
     description:
       'Atualiza só os campos enviados (licenseNumber, licenseExpiry, isActive). `userId` não ' +
-      'entra aqui, o vínculo é fixo após criado. Acesso: ADMIN.\n\n' +
+      'entra aqui, o vínculo é fixo após criado. Acesso: ADMIN, FLEET_MANAGER (via permissão DRIVER_UPDATE).\n\n' +
       '`x-database-tables`: lê `drivers`; escreve em `drivers`.',
     ...({
       'x-database-tables': { read: ['drivers'], write: ['drivers'] },
@@ -207,13 +208,14 @@ export class DriversController {
   }
 
   @Put(':id')
-  @Roles('ADMIN')
+  @Permissions('DRIVER_UPDATE')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Substitui um motorista',
     description:
       'Substitui todos os campos editáveis (licenseNumber, licenseExpiry, isActive são ' +
-      'obrigatórios). `userId` não entra aqui, o vínculo é fixo após criado. Acesso: ADMIN.\n\n' +
+      'obrigatórios). `userId` não entra aqui, o vínculo é fixo após criado. Acesso: ADMIN, ' +
+      'FLEET_MANAGER (via permissão DRIVER_UPDATE).\n\n' +
       '`x-database-tables`: lê `drivers`; escreve em `drivers`.',
     ...({
       'x-database-tables': { read: ['drivers'], write: ['drivers'] },

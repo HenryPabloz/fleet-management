@@ -31,6 +31,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UsuarioLogado } from '../auth/interfaces/usuario-logado.interface';
 import type { ConfigVars } from '../config/configuration';
@@ -82,9 +83,10 @@ const INCIDENT_SCHEMA = {
   },
 };
 
-// Leitura e criação: ADMIN, FLEET_MANAGER e DRIVER (motorista reporta o
-// próprio incidente). Mudar status e remover: só ADMIN e FLEET_MANAGER
-// (investigar/resolver um incidente é decisão de gestão, não do motorista).
+// Leitura: quem tiver INCIDENT_VIEW_OWN ou INCIDENT_VIEW_ALL. Criação:
+// INCIDENT_CREATE (motorista reporta o próprio incidente). Mudar status e
+// remover: só ADMIN e FLEET_MANAGER (investigar/resolver um incidente é
+// decisão de gestão; sem código de permission pra essas duas ações no seed).
 @ApiTags('incidents')
 @ApiBearerAuth('jwt')
 @ApiExtraModels(ErroPadraoDto, PaginacaoMetadataDto)
@@ -97,7 +99,7 @@ export class IncidentsController {
   ) {}
 
   @Get()
-  @Roles('ADMIN', 'FLEET_MANAGER', 'DRIVER')
+  @Permissions('INCIDENT_VIEW_OWN', 'INCIDENT_VIEW_ALL')
   @ApiOperation({
     summary: 'Lista incidentes (paginado)',
     description:
@@ -166,7 +168,7 @@ export class IncidentsController {
   }
 
   @Get(':id')
-  @Roles('ADMIN', 'FLEET_MANAGER', 'DRIVER')
+  @Permissions('INCIDENT_VIEW_OWN', 'INCIDENT_VIEW_ALL')
   @ApiOperation({
     summary: 'Busca um incidente por id',
     description:
@@ -185,7 +187,7 @@ export class IncidentsController {
   }
 
   @Post()
-  @Roles('ADMIN', 'FLEET_MANAGER', 'DRIVER')
+  @Permissions('INCIDENT_CREATE')
   @HttpCode(201)
   @UseFilters(MulterErrorFilter)
   @UseInterceptors(FileInterceptor('photo', configuracaoDeUploadDeIncidente))

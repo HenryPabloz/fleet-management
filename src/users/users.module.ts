@@ -6,5 +6,7 @@ import { UsersService } from './users.service';
 @Module({
   controllers: [UsersController],
   providers: [UsersService, SoftDeleteService],
+  // Exportado para o PermissionsModule reaproveitar buscarPorId (não duplicar a query).
+  exports: [UsersService],
 })
 export class UsersModule {}
