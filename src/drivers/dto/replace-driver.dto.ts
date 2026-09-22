@@ -5,6 +5,7 @@ import {
   IsISO8601,
   IsNotEmpty,
   IsString,
+  Matches,
   MaxLength,
 } from 'class-validator';
 
@@ -25,6 +26,9 @@ export class ReplaceDriverDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
+  @Matches(/^[0-9]{11}$/, {
+    message: 'License number must be exactly 11 digits (CNH format)',
+  })
   licenseNumber!: string;
 
   @ApiProperty({

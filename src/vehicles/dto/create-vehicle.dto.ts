@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   Length,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -23,6 +24,10 @@ export class CreateVehicleDto {
   })
   @IsString()
   @Length(7, 8)
+  @Matches(/^([A-Z]{3}[0-9][A-Z][0-9]{2}|[A-Z]{3}-?[0-9]{4})$/, {
+    message:
+      'Plate must be in Mercosul format (ABC1D23) or the old format (ABC1234 or ABC-1234)',
+  })
   plate!: string;
 
   @Transform(({ value }) => {

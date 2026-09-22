@@ -10,40 +10,40 @@ export class DriverRespostaDto {
     description: 'Identificador do motorista (UUID).',
     example: 'a1b2c3d4-e5f6-4788-9900-112233445566',
   })
-  id: string;
+  id!: string;
 
   @ApiProperty({
     description: 'Identificador do usuário vinculado a este motorista (UUID).',
     example: 'b3c1a2e4-6f5d-4a8b-9c2e-1a2b3c4d5e6f',
   })
-  userId: string;
+  userId!: string;
 
   @ApiProperty({
     description: 'Número da CNH (único no sistema).',
     example: '12345678900',
   })
-  licenseNumber: string;
+  licenseNumber!: string;
 
   @ApiProperty({
     description: 'Data de validade da CNH.',
     example: '2027-08-30',
   })
-  licenseExpiry: string;
+  licenseExpiry!: string;
 
   @ApiProperty({ description: 'Se o motorista está ativo.', example: true })
-  isActive: boolean;
+  isActive!: boolean;
 
   @ApiProperty({
     description: 'Data de criação do registro.',
     example: '2026-01-15T12:00:00.000Z',
   })
-  createdAt: string;
+  createdAt!: string;
 
   @ApiProperty({
     description: 'Data da última atualização do registro.',
     example: '2026-02-20T09:30:00.000Z',
   })
-  updatedAt: string;
+  updatedAt!: string;
 
   @ApiProperty({
     description:
@@ -51,5 +51,5 @@ export class DriverRespostaDto {
     example: null,
     nullable: true,
   })
-  deletedAt: string | null;
+  deletedAt!: string | null;
 }
