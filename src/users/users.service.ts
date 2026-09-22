@@ -219,6 +219,29 @@ export class UsersService {
       );
     }
 
+    // audit_logs é append-only (trigger bloqueia UPDATE/DELETE): usuário com
+    // qualquer linha lá nunca pode ser hard-deletado, por design (trilha íntegra).
+    const [logDeAuditoria, viagemCriada, abastecimentoRegistrado, manutencaoRegistrada, incidenteRegistrado] =
+      await Promise.all([
+        this.servicoPrisma.auditLog.findFirst({ where: { changedBy: id } }),
+        this.servicoPrisma.trip.findFirst({ where: { createdBy: id } }),
+        this.servicoPrisma.refueling.findFirst({ where: { registeredBy: id } }),
+        this.servicoPrisma.maintenance.findFirst({ where: { registeredBy: id } }),
+        this.servicoPrisma.incident.findFirst({ where: { registeredBy: id } }),
+      ]);
+
+    if (
+      logDeAuditoria ||
+      viagemCriada ||
+      abastecimentoRegistrado ||
+      manutencaoRegistrada ||
+      incidenteRegistrado
+    ) {
+      throw new ConflictException(
+        'Cannot permanently delete a user with associated history (driver record, audit log, trips, refuelings, maintenances or incidents). This preserves the integrity of the audit trail.',
+      );
+    }
+
     await this.servicoSoftDelete.removerPermanentemente('user', id);
   }
 
