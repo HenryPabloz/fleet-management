@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { validateConfig } from './config/configuration';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
@@ -45,6 +46,8 @@ import { IncidentsModule } from './incidents/incidents.module';
     AppService,
     // Aplica o rate limiting em todas as rotas por padrão.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Loga método, rota, usuário, status e duração de cada requisição.
+    { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
   ],
 })
 export class AppModule {}
