@@ -16,6 +16,7 @@ API REST em NestJS para gestão de veículos, motoristas, viagens, abastecimento
 - [Autenticação](#autenticação)
 - [Endpoints](#endpoints)
 - [Exemplos de uso (curl)](#exemplos-de-uso-curl)
+- [Formato de erro](#formato-de-erro)
 - [Swagger](#swagger)
 - [Banco de dados](#banco-de-dados)
 
@@ -95,6 +96,29 @@ docker compose up -d
 npx prisma migrate deploy
 ```
 
+### Rodando com Docker (app + banco)
+
+Além do PostgreSQL, a própria API também pode subir em container (serviço `app` no `docker-compose.yml`, imagem construída pelo `Dockerfile` multi-stage da raiz):
+
+```bash
+# sobe Postgres + API, construindo a imagem da API se necessário
+docker compose up -d --build
+```
+
+O que acontece automaticamente:
+
+- O serviço `app` só inicia depois que o `postgres` fica `healthy` (`depends_on` com `condition: service_healthy`).
+- No start do container, o `CMD` do `Dockerfile` roda `npx prisma migrate deploy` antes de subir a aplicação — não é preciso aplicar as migrations manualmente.
+- A pasta `uploads/` (fotos de incidentes) fica num volume Docker (`uploads_data`), então os arquivos sobrevivem a um rebuild do container.
+
+**Atenção à porta do banco:** fora do container (no seu PC) o Postgres está em `localhost:5433` (é o mapeamento definido no serviço `postgres`). Dentro da rede interna do compose, o serviço `app` enxerga o Postgres como `postgres:5432` (nome do serviço, porta interna padrão) — por isso o `DATABASE_URL` usado pelo container da API é diferente do valor em `.env.example`/`.env` (que é pensado pra rodar a API fora do Docker, contra a porta `5433` do host).
+
+Para derrubar sem apagar o volume do banco:
+
+```bash
+docker compose down
+```
+
 ## Configuração (.env)
 
 Copie `.env.example` para `.env` e preencha os valores. Nenhum valor abaixo é real, são apenas exemplos de formato.
@@ -112,6 +136,7 @@ Copie `.env.example` para `.env` e preencha os valores. Nenhum valor abaixo é r
 | `AWS_S3_BUCKET` | Nome do bucket S3 associado às credenciais acima. |
 | `CEP_API_URL` | URL base da API do ViaCEP usada para validar/enriquecer CEPs. |
 | `CEP_TIMEOUT_MS` | Timeout (em ms) das chamadas à API de CEP. |
+| `CORS_ORIGIN` | Origens liberadas para CORS. `*` libera qualquer origem (uso em dev); em produção, use uma lista de domínios separados por vírgula (ex: `https://app.com,https://admin.app.com`) — com origem restrita, `credentials: true` é habilitado junto. |
 | `ADMIN_EMAIL` | E-mail do usuário admin criado pelo seed. |
 | `ADMIN_INITIAL_PASSWORD` | Senha inicial do usuário admin criado pelo seed. |
 | `ADMIN_API_KEY` | API key do admin (64 caracteres hex minúsculos, ex: gerada com `openssl rand -hex 32`); se vazia fora de produção, o seed gera uma e imprime no console. |
@@ -192,6 +217,12 @@ Para o detalhe completo (guards, estratégias, matriz de permissões, RBAC) veja
 ## Endpoints
 
 Autenticação: **pública** (sem guard), **API key** (header `x-api-key`) ou **JWT** (header `Authorization: Bearer`, + papéis exigidos). Documentação interativa completa, com request/response de cada rota, em `/api/docs` (Swagger) — ver [seção Swagger](#swagger).
+
+### Health (`/health`)
+
+| Método | Rota | Autenticação |
+|---|---|---|
+| GET | `/health` | Pública (sem autenticação, fora do rate limiting) |
 
 ### Auth (`/auth`)
 
@@ -321,7 +352,7 @@ Gestão da delegação granular de permissões (tabela `user_permissions`). Toda
 | POST | `/users/:id/permissions` | ADMIN |
 | DELETE | `/users/:id/permissions/:code` | ADMIN |
 
-**Total: 74 rotas de negócio** nos 10 controllers acima (o `GET /` da raiz é só o placeholder padrão do `nest new`, não faz parte da API de negócio). Nas tabelas acima, "Papéis" lista quem tem acesso **por papel** (`@Roles(...)`, fixo) ou **por permissão** (`@Permissions(...)`, que também aceita delegação granular via `UserPermission` — ver seção 5 de `projectDocs/projeto-fleet-management.md` para o detalhe de qual mecanismo cada rota usa).
+**Total: 74 rotas de negócio** nos 10 controllers acima (o `GET /` da raiz é só o placeholder padrão do `nest new`, e o `GET /health` é infraestrutura — nenhum dos dois faz parte da API de negócio). Nas tabelas acima, "Papéis" lista quem tem acesso **por papel** (`@Roles(...)`, fixo) ou **por permissão** (`@Permissions(...)`, que também aceita delegação granular via `UserPermission` — ver seção 5 de `projectDocs/projeto-fleet-management.md` para o detalhe de qual mecanismo cada rota usa).
 
 ## Exemplos de uso (curl)
 
@@ -377,6 +408,33 @@ curl -X POST http://localhost:3000/incidents \
 # Indicador de consumo de combustível da frota
 curl -X GET http://localhost:3000/analytics/fleet/fuel-consumption \
   -H "Authorization: Bearer <JWT_ADMIN_OU_FLEET_MANAGER>"
+```
+
+## Formato de erro
+
+Todo erro da API (validação, exceção de negócio, erro não tratado) passa pelo `GlobalExceptionFilter` e sai no formato **RFC 7807 (Problem Details)**, `content-type: application/problem+json`:
+
+```json
+{
+  "type": "https://fleet-management.local/errors/not-found",
+  "title": "Recurso não encontrado",
+  "status": 404,
+  "detail": "User not found",
+  "instance": "/users/b3c1a2e4-6f5d-4a8b-9c2e-1a2b3c4d5e6f"
+}
+```
+
+Em erros de validação (`ValidationPipe` global), aparece um campo extra `errors` (fora do padrão RFC 7807) com uma mensagem por campo inválido:
+
+```json
+{
+  "type": "https://fleet-management.local/errors/validation-error",
+  "title": "Requisição inválida",
+  "status": 400,
+  "detail": "Um ou mais campos da requisição são inválidos.",
+  "instance": "/auth/signup",
+  "errors": ["email must be an email", "password must be longer than or equal to 8 characters"]
+}
 ```
 
 ## Swagger
