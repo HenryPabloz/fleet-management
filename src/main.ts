@@ -41,7 +41,7 @@ async function bootstrap() {
     .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'x-api-key')
     .build();
   const documento = SwaggerModule.createDocument(app, documentoSwagger);
-  SwaggerModule.setup('docs', app, documento);
+  SwaggerModule.setup('api/docs', app, documento);
 
   await app.listen(porta);
 }

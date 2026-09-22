@@ -35,7 +35,21 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
   const idsDeUsuarioParaLimpar: string[] = [];
 
   function novaPlaca(): string {
-    return `E2E${randomBytes(3).toString('hex').toUpperCase().slice(0, 4)}`;
+    // Formato antigo (3 letras + 4 números), aceito pelo CHECK do banco e pelo @Matches do DTO.
+    const letras = Array.from({ length: 3 }, () =>
+      String.fromCharCode(65 + Math.floor(Math.random() * 26)),
+    ).join('');
+    const numeros = randomBytes(2)
+      .readUInt16BE(0)
+      .toString()
+      .padStart(4, '0')
+      .slice(-4);
+    return `${letras}${numeros}`;
+  }
+
+  function novaCnh(): string {
+    // 11 dígitos, formato exigido pelo @Matches do DTO.
+    return randomBytes(6).readUIntBE(0, 6).toString().padStart(11, '0').slice(-11);
   }
 
   function novoEmail(): string {
@@ -82,7 +96,7 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
     const driver = await autenticado(tokenAdmin, 'post', '/drivers')
       .send({
         userId: usuario.body.id,
-        licenseNumber: `E2E${randomBytes(4).toString('hex')}`,
+        licenseNumber: novaCnh(),
         licenseExpiry: dataFutura.toISOString(),
       })
       .expect(201);

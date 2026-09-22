@@ -24,6 +24,24 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
     return `e2e-soft-${randomBytes(6).toString('hex')}@test.local`;
   }
 
+  function novaPlaca(): string {
+    // Formato antigo (3 letras + 4 números), aceito pelo CHECK do banco e pelo @Matches do DTO.
+    const letras = Array.from({ length: 3 }, () =>
+      String.fromCharCode(65 + Math.floor(Math.random() * 26)),
+    ).join('');
+    const numeros = randomBytes(2)
+      .readUInt16BE(0)
+      .toString()
+      .padStart(4, '0')
+      .slice(-4);
+    return `${letras}${numeros}`;
+  }
+
+  function novaCnh(): string {
+    // 11 dígitos, formato exigido pelo @Matches do DTO.
+    return randomBytes(6).readUIntBE(0, 6).toString().padStart(11, '0').slice(-11);
+  }
+
   function autenticado(metodo: 'get' | 'post' | 'patch' | 'put' | 'delete', caminho: string) {
     return request(app.getHttpServer())
       [metodo](caminho)
@@ -189,7 +207,7 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
       const resposta = await autenticado('post', '/drivers')
         .send({
           userId: idUsuarioDoDriver,
-          licenseNumber: `E2E${randomBytes(4).toString('hex')}`,
+          licenseNumber: novaCnh(),
           licenseExpiry: dataFutura.toISOString(),
         })
         .expect(201);
@@ -267,7 +285,7 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
       const respostaDriver = await autenticado('post', '/drivers')
         .send({
           userId: idUsuario,
-          licenseNumber: `E2E${randomBytes(4).toString('hex')}`,
+          licenseNumber: novaCnh(),
           licenseExpiry: dataFutura.toISOString(),
         })
         .expect(201);
@@ -353,14 +371,14 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
       const driver = await autenticado('post', '/drivers')
         .send({
           userId: idUsuarioMotorista,
-          licenseNumber: `E2E${randomBytes(4).toString('hex')}`,
+          licenseNumber: novaCnh(),
           licenseExpiry: dataFutura.toISOString(),
         })
         .expect(201);
 
       const veiculo = await prisma.vehicle.create({
         data: {
-          plate: `E2E${randomBytes(3).toString('hex').toUpperCase().slice(0, 4)}`,
+          plate: novaPlaca(),
           model: 'Fiat Strada',
           year: 2022,
           currentMileage: 1000,
