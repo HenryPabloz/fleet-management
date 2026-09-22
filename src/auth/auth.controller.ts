@@ -8,6 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiBody,
   ApiExtraModels,
   ApiOperation,
@@ -27,6 +28,7 @@ import { RegenerateApiKeyResponseDto } from './dto/regenerate-api-key-response.d
 import { SignupResponseDto } from './dto/signup-response.dto';
 import { SignupDto } from './dto/signup.dto';
 import { ApiKeyGuard } from './guards/api-key.guard';
+import { JwtAuthGuard } from './guards/jwt.guard';
 import type { UsuarioLogado } from './interfaces/usuario-logado.interface';
 
 @ApiTags('auth')
@@ -148,5 +150,35 @@ export class AuthController {
     @CurrentUser() usuario: UsuarioLogado,
   ): Promise<RegenerateApiKeyResponseDto> {
     return this.servicoAuth.regenerateApiKey(usuario.userId);
+  }
+
+  @Post('refresh-token')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @ApiBearerAuth('jwt')
+  @ApiOperation({
+    summary: 'Renova o JWT do usuário autenticado',
+    description:
+      'Troca um JWT ainda válido (header `Authorization: Bearer <token>`) por um ' +
+      'novo, com a mesma carga (usuário) e prazo renovado. Não gera um refresh ' +
+      'token separado, e não confunda com `PATCH /auth/regenerate-key`: aquela ' +
+      'rota troca a API key (`x-api-key`), esta troca o JWT (`Authorization: Bearer`).\n\n' +
+      '`x-database-tables`: lê `users` (confirma que a conta ainda existe e está ativa).',
+    ...({
+      'x-database-tables': { read: ['users'], write: [] },
+    } as Record<string, unknown>),
+  })
+  @ApiResponse({ status: 200, description: 'Token renovado.', type: LoginResponseDto })
+  @ApiResponse({
+    status: 401,
+    description: 'Token ausente, inválido, expirado, ou dono do token inativo/inexistente.',
+    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+  })
+  async refreshToken(
+    @CurrentUser() usuario: UsuarioLogado,
+  ): Promise<LoginResponseDto> {
+    return this.servicoAuth.refreshToken(usuario);
   }
 }

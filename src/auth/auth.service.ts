@@ -15,6 +15,7 @@ import { RegenerateApiKeyResponseDto } from './dto/regenerate-api-key-response.d
 import { SignupResponseDto } from './dto/signup-response.dto';
 import { SignupDto } from './dto/signup.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { UsuarioLogado } from './interfaces/usuario-logado.interface';
 import { calcularHashApiKey, gerarApiKey } from './utils/api-key.util';
 
 // Hash fixo usado para gastar o mesmo tempo quando o e-mail não existe.
@@ -118,6 +119,35 @@ export class AuthService {
     // A chave precisa ser do mesmo usuário do e-mail e senha.
     if (!usuario || !senhaCorreta || usuario.id !== idDonoDaChave) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const carga: Omit<JwtPayload, 'iat' | 'exp'> = {
+      sub: usuario.id,
+      email: usuario.email,
+      roleId: usuario.roleId,
+    };
+
+    return {
+      accessToken: this.servicoJwt.sign(carga),
+      user: {
+        id: usuario.id,
+        email: usuario.email,
+        fullName: usuario.fullName,
+        role: usuario.role.name,
+      },
+    };
+  }
+
+  // Troca um JWT ainda válido por um novo, com prazo renovado e a mesma carga.
+  async refreshToken(usuarioLogado: UsuarioLogado): Promise<LoginResponseDto> {
+    const usuario = await this.servicoPrisma.user.findUnique({
+      where: { id: usuarioLogado.userId },
+      include: { role: true },
+    });
+
+    // Reforça aqui a mesma checagem da JwtStrategy: ação sensível, confirma de novo.
+    if (!usuario || !usuario.isActive) {
+      throw new UnauthorizedException('Invalid or expired token');
     }
 
     const carga: Omit<JwtPayload, 'iat' | 'exp'> = {
