@@ -5,6 +5,8 @@
 
 .env
 
+projectDocs/
+
 .agents
 .claude
 .windsurf
