@@ -9,29 +9,29 @@ export class ProblemDetailsDto {
     description: 'URI que identifica o tipo do erro.',
     example: 'https://api.frota.com/erros/credenciais-invalidas',
   })
-  type: string;
+  type!: string;
 
   @ApiProperty({
     description: 'Resumo curto e legível do tipo do erro.',
     example: 'Credenciais inválidas',
   })
-  title: string;
+  title!: string;
 
   @ApiProperty({
     description: 'Código de status HTTP da resposta.',
     example: 401,
   })
-  status: number;
+  status!: number;
 
   @ApiProperty({
     description: 'Explicação detalhada do erro, específica para esta ocorrência.',
     example: 'O e-mail ou a senha informados não conferem.',
   })
-  detail: string;
+  detail!: string;
 
   @ApiProperty({
     description: 'URI que identifica a ocorrência específica do erro (geralmente o path da requisição).',
     example: '/auth/login',
   })
-  instance: string;
+  instance!: string;
 }

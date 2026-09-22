@@ -16,7 +16,7 @@ export class ErroPadraoDto {
     description: 'Código de status HTTP da resposta.',
     example: 404,
   })
-  statusCode: number;
+  statusCode!: number;
 
   @ApiProperty({
     description:
@@ -32,11 +32,11 @@ export class ErroPadraoDto {
       },
     ],
   })
-  message: string | string[];
+  message!: string | string[];
 
   @ApiProperty({
     description: 'Nome curto do status HTTP.',
     example: 'Not Found',
   })
-  error: string;
+  error!: string;
 }

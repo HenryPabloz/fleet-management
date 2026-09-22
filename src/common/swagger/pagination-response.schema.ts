@@ -6,16 +6,16 @@ import { ApiProperty } from '@nestjs/swagger';
  */
 export class PaginacaoMetadataDto {
   @ApiProperty({ description: 'Página atual (começa em 1).', example: 1 })
-  page: number;
+  page!: number;
 
   @ApiProperty({ description: 'Quantidade de itens por página.', example: 20 })
-  pageSize: number;
+  pageSize!: number;
 
   @ApiProperty({ description: 'Quantidade total de itens encontrados.', example: 150 })
-  total: number;
+  total!: number;
 
   @ApiProperty({ description: 'Quantidade total de páginas.', example: 8 })
-  totalPages: number;
+  totalPages!: number;
 }
 
 /**
@@ -29,8 +29,8 @@ export class PaginacaoRespostaDto {
     isArray: true,
     type: () => Object,
   })
-  data: unknown[];
+  data!: unknown[];
 
   @ApiProperty({ description: 'Metadados de paginação.', type: () => PaginacaoMetadataDto })
-  pagination: PaginacaoMetadataDto;
+  pagination!: PaginacaoMetadataDto;
 }
