@@ -25,6 +25,7 @@ export interface ConfigVars {
   // };
   external: {
     cepApiUrl: string;
+    cepTimeoutMs: number;
   };
 }
 
@@ -52,6 +53,7 @@ export function validateConfig(config: Record<string, unknown>): ConfigVars {
     // GOOGLE_CLOUD_PROJECT_ID: joi.string().optional(),
     // GOOGLE_CLOUD_KEY_FILE: joi.string().optional(),
     CEP_API_URL: joi.string().default('https://viacep.com.br/ws'),
+    CEP_TIMEOUT_MS: joi.number().default(10000),
   });
 
   const { value, error } = schema.validate(config, { allowUnknown: true });
@@ -74,6 +76,9 @@ export function validateConfig(config: Record<string, unknown>): ConfigVars {
     //   projectId: value.GOOGLE_CLOUD_PROJECT_ID,
     //   keyFile: value.GOOGLE_CLOUD_KEY_FILE,
     // },
-    external: { cepApiUrl: value.CEP_API_URL },
+    external: {
+      cepApiUrl: value.CEP_API_URL,
+      cepTimeoutMs: value.CEP_TIMEOUT_MS,
+    },
   };
 }

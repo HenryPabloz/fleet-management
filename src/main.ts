@@ -1,5 +1,6 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { useContainer } from 'class-validator';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
@@ -26,6 +27,10 @@ async function bootstrap() {
       transform: true,
     }),
   );
+  // Sem isso, um @ValidatorConstraint({ async: true }) com @Injectable() (como o
+  // IsValidCepConstraint) não consegue injetar o ViaCepService: o class-validator
+  // usaria seu próprio container em vez do container de DI do Nest.
+  useContainer(app.select(AppModule), { fallbackOnErrors: true });
 
   const porta = process.env.PORT ?? 3000;
 
