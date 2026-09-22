@@ -7,6 +7,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
+import { ViaCepModule } from './external/viacep/via-cep.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { DriversModule } from './drivers/drivers.module';
@@ -15,6 +16,7 @@ import { MaintenancesModule } from './maintenances/maintenances.module';
 import { TripsModule } from './trips/trips.module';
 import { RefuelingsModule } from './refuelings/refuelings.module';
 import { IncidentsModule } from './incidents/incidents.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -32,6 +34,7 @@ import { IncidentsModule } from './incidents/incidents.module';
       },
     ]),
     DatabaseModule,
+    ViaCepModule,
     AuthModule,
     UsersModule,
     DriversModule,
@@ -40,6 +43,7 @@ import { IncidentsModule } from './incidents/incidents.module';
     TripsModule,
     RefuelingsModule,
     IncidentsModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [
