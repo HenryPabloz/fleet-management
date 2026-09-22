@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { SoftDeleteService } from '../common/services/soft-delete.service';
+import { ViaCepService } from '../external/viacep/via-cep.service';
 import { traduzirErroDeProcedure } from '../common/utils/mapeador-erros-procedure.util';
 import {
   montarPaginacao,
@@ -16,6 +17,7 @@ export class TripsService {
   constructor(
     private servicoPrisma: PrismaService,
     private servicoSoftDelete: SoftDeleteService,
+    private servicoViaCep: ViaCepService,
   ) {}
 
   async listar(
@@ -66,12 +68,20 @@ export class TripsService {
   async criar(dados: CreateTripDto, idDoUsuario: string) {
     let idDaViagemCriada = '';
 
+    // startLocation/endLocation chegam aqui como CEP (já validados pelo
+    // @IsValidCep() do DTO). Resolvemos os dois na API do ViaCEP e gravamos o
+    // endereço, não o CEP cru.
+    const [enderecoInicio, enderecoFim] = await Promise.all([
+      this.servicoViaCep.buscarPorCep(dados.startLocation),
+      this.servicoViaCep.buscarPorCep(dados.endLocation),
+    ]);
+
     try {
       await this.servicoPrisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT set_config('app.current_user_id', ${idDoUsuario}::text, true)`;
 
         const resultado = await tx.$queryRaw<Array<{ id: string; status: string }>>`
-          CALL create_trip(${dados.driverId}::uuid, ${dados.vehicleId}::uuid, ${dados.startKm}, ${dados.startLocation}, ${dados.endLocation}, ${idDoUsuario}::uuid, NULL, NULL)
+          CALL create_trip(${dados.driverId}::uuid, ${dados.vehicleId}::uuid, ${dados.startKm}, ${enderecoInicio.fullAddress}, ${enderecoFim.fullAddress}, ${idDoUsuario}::uuid, NULL, NULL)
         `;
         idDaViagemCriada = resultado[0].id;
       });

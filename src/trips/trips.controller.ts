@@ -63,8 +63,16 @@ const TRIP_SCHEMA = {
     status: { type: 'string', enum: ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'], example: 'PLANNED' },
     startKm: { type: 'integer', example: 15000 },
     endKm: { type: 'integer', nullable: true, example: null },
-    startLocation: { type: 'string', example: 'Matriz - São Paulo/SP' },
-    endLocation: { type: 'string', example: 'Filial - Campinas/SP' },
+    startLocation: {
+      type: 'string',
+      description: 'Endereço resolvido pelo ViaCEP a partir do CEP enviado na criação (não é mais texto livre).',
+      example: 'São Paulo, SP',
+    },
+    endLocation: {
+      type: 'string',
+      description: 'Endereço resolvido pelo ViaCEP a partir do CEP enviado na criação (não é mais texto livre).',
+      example: 'Campinas, SP',
+    },
     startTime: { type: 'string', format: 'date-time' },
     endTime: { type: 'string', format: 'date-time', nullable: true, example: null },
     createdBy: { type: 'string', format: 'uuid' },
@@ -195,9 +203,12 @@ export class TripsController {
     description:
       'Chama a procedure `create_trip`, que valida motorista (ativo, CNH válida), veículo ' +
       '(disponível) e quilometragem inicial, e já reserva o veículo (`AVAILABLE` -> `IN_USE`). ' +
-      'A viagem nasce com status `PLANNED`. Não existe `PUT`/`PATCH` genérico de campos livres: ' +
-      'a viagem só muda de estado pelas rotas `start`/`end`/`cancel`. Acesso: ADMIN, ' +
-      'FLEET_MANAGER, DRIVER.\n\n' +
+      'A viagem nasce com status `PLANNED`. `startLocation` e `endLocation` precisam ser um ' +
+      '**CEP brasileiro válido** (com ou sem máscara) — não é mais texto livre. Os dois CEPs são ' +
+      'validados e resolvidos contra a API real do ViaCEP antes de chamar a procedure, e o que ' +
+      'fica gravado na viagem é o endereço resolvido (ex: `"São Paulo, SP"`), não o CEP em si. ' +
+      'Não existe `PUT`/`PATCH` genérico de campos livres: a viagem só muda de estado pelas ' +
+      'rotas `start`/`end`/`cancel`. Acesso: ADMIN, FLEET_MANAGER, DRIVER.\n\n' +
       ERROS_DE_PROCEDURE_COMUNS +
       '\n\n`x-database-tables`: lê `drivers`, `vehicles`; escreve em `trips` e `vehicles` ' +
       '(procedure `create_trip`).',
@@ -210,13 +221,29 @@ export class TripsController {
   })
   @ApiBody({ type: CreateTripDto })
   @ApiResponse({ status: 201, description: 'Viagem criada (status PLANNED).', schema: TRIP_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Corpo inválido, ou erro de validação da procedure (ex: quilometragem inicial negativa).', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Corpo inválido (ex: `startLocation`/`endLocation` não é um CEP válido ou não encontrado ' +
+      'na API do ViaCEP), ou erro de validação da procedure (ex: quilometragem inicial negativa).',
+    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+  })
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso, ou motorista inativo.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
   @ApiResponse({ status: 404, description: '`driverId` ou `vehicleId` não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
   @ApiResponse({
     status: 409,
     description: 'Veículo indisponível (em uso, em manutenção ou fora de serviço), motorista inativo, CNH vencida, ou motorista/veículo já com viagem ativa.',
+    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'Erro de rede ao consultar a API do ViaCEP para resolver `startLocation`/`endLocation`.',
+    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+  })
+  @ApiResponse({
+    status: 504,
+    description: 'Timeout ou rate limit ao consultar a API do ViaCEP para resolver `startLocation`/`endLocation`.',
     schema: { $ref: getSchemaPath(ErroPadraoDto) },
   })
   criar(@Body() dados: CreateTripDto, @CurrentUser() usuario: UsuarioLogado) {
