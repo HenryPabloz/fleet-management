@@ -17,5 +17,26 @@ services:
       timeout: 5s
       retries: 5
 
+  app:
+    build: .
+    container_name: fleet_api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    # env_file carrega as variáveis "fixas" do .env (JWT, AWS, CEP, admin...).
+    # DATABASE_URL é sobrescrita logo abaixo porque, de dentro do container, o Postgres
+    # não é "localhost:5433" (isso é só o mapeamento pro host) e sim "postgres:5432"
+    # (nome do serviço na rede interna do compose, porta interna do Postgres).
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql://postgres:root@postgres:5432/fleet_db?schema=public"
+      PORT: 3000
+    volumes:
+      - uploads_data:/app/uploads
+
 volumes:
   postgres_data:
+  uploads_data:
