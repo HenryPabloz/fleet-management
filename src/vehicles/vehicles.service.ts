@@ -7,6 +7,7 @@ import {
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { SoftDeleteService } from '../common/services/soft-delete.service';
+import { ViaCepService } from '../external/viacep/via-cep.service';
 import {
   montarPaginacao,
   normalizarPaginacao,
@@ -54,21 +55,29 @@ export class VehiclesService {
   constructor(
     private servicoPrisma: PrismaService,
     private servicoSoftDelete: SoftDeleteService,
+    private servicoViaCep: ViaCepService,
   ) {}
 
   async listar(
     page?: number,
     pageSize?: number,
+    status?: string,
   ): Promise<ResultadoPaginado<unknown>> {
     const paginacao = normalizarPaginacao(page, pageSize);
 
+    const where: Record<string, unknown> = {};
+    if (status) {
+      where.status = status;
+    }
+
     const [dados, total] = await Promise.all([
       this.servicoPrisma.comSoftDelete.vehicle.findMany({
+        where,
         skip: (paginacao.page - 1) * paginacao.pageSize,
         take: paginacao.pageSize,
         orderBy: { createdAt: 'desc' },
       }),
-      this.servicoPrisma.comSoftDelete.vehicle.count(),
+      this.servicoPrisma.comSoftDelete.vehicle.count({ where }),
     ]);
 
     return montarPaginacao(dados, total, paginacao.page, paginacao.pageSize);
@@ -105,8 +114,19 @@ export class VehiclesService {
       lastMaintenanceKm = dados.lastMaintenanceKm;
     }
 
+    // Se veio um CEP, busca o endereço real na API do ViaCEP. Isso só
+    // enriquece a resposta devolvida ao cliente, não vira coluna no banco.
+    let localizacaoInicial: Awaited<
+      ReturnType<ViaCepService['buscarPorCep']>
+    > | null = null;
+    if (dados.initialLocationCep) {
+      localizacaoInicial = await this.servicoViaCep.buscarPorCep(
+        dados.initialLocationCep,
+      );
+    }
+
     try {
-      return await this.servicoPrisma.vehicle.create({
+      const veiculoCriado = await this.servicoPrisma.vehicle.create({
         data: {
           plate: dados.plate,
           model: dados.model,
@@ -116,6 +136,11 @@ export class VehiclesService {
           lastMaintenanceKm,
         },
       });
+
+      if (localizacaoInicial) {
+        return { ...veiculoCriado, initialLocation: localizacaoInicial };
+      }
+      return veiculoCriado;
     } catch (erro) {
       traduzirErroDeEscritaVeiculo(erro);
     }

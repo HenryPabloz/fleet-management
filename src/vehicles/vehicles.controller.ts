@@ -30,6 +30,7 @@ import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
 import { ErroPadraoDto } from '../common/swagger/erro-padrao.schema';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
+import { ListVehicleQueryDto } from './dto/list-vehicle-query.dto';
 import { ReplaceVehicleDto } from './dto/replace-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 import { VehiclesService } from './vehicles.service';
@@ -72,6 +73,43 @@ const VEHICLE_SCHEMA = {
   },
 };
 
+// Schema de resposta específico do POST: quando o corpo traz `initialLocationCep`,
+// o serviço enriquece a resposta com `initialLocation` (endereço resolvido pelo
+// ViaCEP), sem persistir isso no banco. Some quando o CEP não é enviado.
+const VEHICLE_CREATE_RESPONSE_SCHEMA = {
+  allOf: [
+    VEHICLE_SCHEMA,
+    {
+      type: 'object',
+      properties: {
+        initialLocation: {
+          type: 'object',
+          description:
+            'Só presente quando `initialLocationCep` foi enviado no corpo da requisição. ' +
+            'Endereço resolvido pela API do ViaCEP; não é persistido no banco.',
+          properties: {
+            cep: { type: 'string', example: '01310-100' },
+            logradouro: { type: 'string', example: 'Avenida Paulista' },
+            complemento: { type: 'string', example: 'lado ímpar' },
+            bairro: { type: 'string', example: 'Bela Vista' },
+            localidade: { type: 'string', example: 'São Paulo' },
+            uf: { type: 'string', example: 'SP' },
+            ibge: { type: 'string', example: '3550308' },
+            gia: { type: 'string', example: '1004' },
+            ddd: { type: 'string', example: '11' },
+            siafi: { type: 'string', example: '7107' },
+            fullAddress: {
+              type: 'string',
+              description: 'Endereço resumido (localidade + UF), o mesmo texto gravado como local em viagens.',
+              example: 'São Paulo, SP',
+            },
+          },
+        },
+      },
+    },
+  ],
+};
+
 // Leitura: ADMIN, FLEET_MANAGER e DRIVER (motorista precisa ver quais veículos
 // estão disponíveis). Escrita: só ADMIN e FLEET_MANAGER.
 @ApiTags('vehicles')
@@ -87,12 +125,19 @@ export class VehiclesController {
   @ApiOperation({
     summary: 'Lista veículos (paginado)',
     description:
-      'Lista veículos ativos (não removidos), paginado. Acesso: ADMIN, FLEET_MANAGER, DRIVER.\n\n' +
+      'Lista veículos ativos (não removidos), paginado, com filtro opcional por status. ' +
+      'Acesso: ADMIN, FLEET_MANAGER, DRIVER.\n\n' +
       '`x-database-tables`: lê `vehicles`.',
     ...({ 'x-database-tables': { read: ['vehicles'] } } as Record<string, unknown>),
   })
   @ApiQuery(QUERY_PAGE)
   @ApiQuery(QUERY_PAGE_SIZE)
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['AVAILABLE', 'IN_USE', 'IN_MAINTENANCE', 'OUT_OF_SERVICE'],
+    description: 'Filtra por status do veículo.',
+  })
   @ApiResponse({
     status: 200,
     description: 'Página de veículos.',
@@ -105,8 +150,8 @@ export class VehiclesController {
   })
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  listar(@Query() paginacao: PaginationQueryDto) {
-    return this.servicoVehicles.listar(paginacao.page, paginacao.pageSize);
+  listar(@Query() query: ListVehicleQueryDto) {
+    return this.servicoVehicles.listar(query.page, query.pageSize, query.status);
   }
 
   // Precisa vir antes de "GET /:id", senão "deleted" seria lido como um id.
@@ -168,22 +213,41 @@ export class VehiclesController {
       'Cria um veículo novo. `status` aceita apenas `AVAILABLE`, `IN_MAINTENANCE` ou ' +
       '`OUT_OF_SERVICE` (padrão: `AVAILABLE`) — `IN_USE` nunca é aceito via API, esse status ' +
       'só é setado pelas procedures de viagem (`start_trip`) quando o veículo entra em uso. ' +
-      'A placa é única. Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      'A placa é única. Aceita opcionalmente `initialLocationCep`: se enviado, é validado contra ' +
+      'a API real do ViaCEP e o endereço resolvido volta no campo `initialLocation` da resposta ' +
+      '— isso só enriquece a resposta, não é persistido no banco (não existe coluna para isso em ' +
+      '`vehicles`). Acesso: ADMIN, FLEET_MANAGER.\n\n' +
       '`x-database-tables`: lê `vehicles` (checa placa duplicada); escreve em `vehicles`.',
     ...({
       'x-database-tables': { read: ['vehicles'], write: ['vehicles'] },
     } as Record<string, unknown>),
   })
   @ApiBody({ type: CreateVehicleDto })
-  @ApiResponse({ status: 201, description: 'Veículo criado.', schema: VEHICLE_SCHEMA })
+  @ApiResponse({
+    status: 201,
+    description: 'Veículo criado. `initialLocation` só aparece quando `initialLocationCep` foi enviado.',
+    schema: VEHICLE_CREATE_RESPONSE_SCHEMA,
+  })
   @ApiResponse({
     status: 400,
-    description: 'Corpo inválido (ex: ano fora do intervalo, placa fora do padrão) ou violação de CHECK do banco.',
+    description:
+      'Corpo inválido (ex: ano fora do intervalo, placa fora do padrão, `initialLocationCep` ' +
+      'inválido ou não encontrado na API do ViaCEP) ou violação de CHECK do banco.',
     schema: { $ref: getSchemaPath(ErroPadraoDto) },
   })
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
   @ApiResponse({ status: 409, description: 'Placa já cadastrada.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({
+    status: 500,
+    description: 'Erro de rede ao consultar a API do ViaCEP (só quando `initialLocationCep` foi enviado).',
+    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+  })
+  @ApiResponse({
+    status: 504,
+    description: 'Timeout ou rate limit ao consultar a API do ViaCEP (só quando `initialLocationCep` foi enviado).',
+    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+  })
   criar(@Body() dados: CreateVehicleDto) {
     return this.servicoVehicles.criar(dados);
   }

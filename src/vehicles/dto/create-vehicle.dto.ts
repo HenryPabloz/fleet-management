@@ -1,3 +1,4 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   IsIn,
@@ -13,6 +14,7 @@ import {
 } from 'class-validator';
 import { STATUS_VEHICLE_ACEITOS_NA_ESCRITA } from './status-vehicle-escrita.constant';
 import type { StatusVehicleEscrita } from './status-vehicle-escrita.constant';
+import { IsValidCep } from '../../common/validators/is-valid-cep.validator';
 
 export class CreateVehicleDto {
   // O CHECK do banco exige maiúsculo/trim; validamos aqui também para dar erro claro.
@@ -61,4 +63,19 @@ export class CreateVehicleDto {
   @Min(0)
   @Max(10000000)
   lastMaintenanceKm?: number;
+
+  // Opcional: se vier, é validado contra a API real do ViaCEP e devolvido
+  // enriquecido na resposta (initialLocation), mas NÃO é persistido no banco.
+  @ApiPropertyOptional({
+    description:
+      'CEP brasileiro (com ou sem máscara) da localização inicial do veículo. Se enviado, é ' +
+      'validado contra a API real do ViaCEP e o endereço resolvido volta no campo ' +
+      '`initialLocation` da resposta — não é persistido no banco (não existe coluna para isso ' +
+      'em `vehicles`).',
+    example: '01310-100',
+  })
+  @IsOptional()
+  @IsString()
+  @IsValidCep()
+  initialLocationCep?: string;
 }
