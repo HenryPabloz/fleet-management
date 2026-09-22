@@ -1,0 +1,188 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { PrismaService } from '../database/prisma.service';
+import { SoftDeleteService } from '../common/services/soft-delete.service';
+import {
+  montarPaginacao,
+  normalizarPaginacao,
+  ResultadoPaginado,
+} from '../common/utils/paginacao.util';
+import { CreateDriverDto } from './dto/create-driver.dto';
+import { ReplaceDriverDto } from './dto/replace-driver.dto';
+import { UpdateDriverDto } from './dto/update-driver.dto';
+
+@Injectable()
+export class DriversService {
+  constructor(
+    private servicoPrisma: PrismaService,
+    private servicoSoftDelete: SoftDeleteService,
+  ) {}
+
+  async listar(
+    page?: number,
+    pageSize?: number,
+  ): Promise<ResultadoPaginado<unknown>> {
+    const paginacao = normalizarPaginacao(page, pageSize);
+
+    const [dados, total] = await Promise.all([
+      // comSoftDelete: a extension já injeta deletedAt: null, então removidos não aparecem.
+      this.servicoPrisma.comSoftDelete.driver.findMany({
+        skip: (paginacao.page - 1) * paginacao.pageSize,
+        take: paginacao.pageSize,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.servicoPrisma.comSoftDelete.driver.count(),
+    ]);
+
+    return montarPaginacao(dados, total, paginacao.page, paginacao.pageSize);
+  }
+
+  async buscarPorId(id: string) {
+    const motorista = await this.servicoPrisma.comSoftDelete.driver.findUnique({
+      where: { id },
+    });
+    if (!motorista) {
+      throw new NotFoundException('Driver not found');
+    }
+    return motorista;
+  }
+
+  async criar(dados: CreateDriverDto) {
+    // comSoftDelete: um usuário soft-deletado não pode virar motorista.
+    const usuario = await this.servicoPrisma.comSoftDelete.user.findUnique({
+      where: { id: dados.userId },
+    });
+    if (!usuario) {
+      throw new BadRequestException('userId does not exist');
+    }
+
+    // Consulta o registro sem filtro: a coluna userId é única no banco mesmo
+    // para um driver soft-deletado, então já bloqueamos aqui com uma mensagem clara.
+    const driverJaExiste = await this.servicoPrisma.driver.findUnique({
+      where: { userId: dados.userId },
+    });
+    if (driverJaExiste) {
+      throw new ConflictException('User already has a driver');
+    }
+
+    const licenseNumberJaExiste = await this.servicoPrisma.driver.findUnique({
+      where: { licenseNumber: dados.licenseNumber },
+    });
+    if (licenseNumberJaExiste) {
+      throw new ConflictException('License number already registered');
+    }
+
+    if (new Date(dados.licenseExpiry) < new Date()) {
+      throw new BadRequestException('licenseExpiry cannot be in the past');
+    }
+
+    let isActive = true;
+    if (dados.isActive !== undefined) {
+      isActive = dados.isActive;
+    }
+
+    return this.servicoPrisma.driver.create({
+      data: {
+        userId: dados.userId,
+        licenseNumber: dados.licenseNumber,
+        licenseExpiry: new Date(dados.licenseExpiry),
+        isActive,
+      },
+    });
+  }
+
+  async atualizarParcial(id: string, dados: UpdateDriverDto) {
+    await this.buscarPorId(id);
+
+    if (dados.licenseNumber) {
+      await this.validarLicenseNumberLivre(dados.licenseNumber, id);
+    }
+
+    let licenseExpiry: Date | undefined;
+    if (dados.licenseExpiry) {
+      licenseExpiry = new Date(dados.licenseExpiry);
+    }
+
+    return this.servicoPrisma.driver.update({
+      where: { id },
+      data: {
+        licenseNumber: dados.licenseNumber,
+        licenseExpiry,
+        isActive: dados.isActive,
+      },
+    });
+  }
+
+  async substituir(id: string, dados: ReplaceDriverDto) {
+    await this.buscarPorId(id);
+    await this.validarLicenseNumberLivre(dados.licenseNumber, id);
+
+    return this.servicoPrisma.driver.update({
+      where: { id },
+      data: {
+        licenseNumber: dados.licenseNumber,
+        licenseExpiry: new Date(dados.licenseExpiry),
+        isActive: dados.isActive,
+      },
+    });
+  }
+
+  async remover(id: string): Promise<void> {
+    await this.buscarPorId(id);
+    await this.servicoSoftDelete.removerLogicamente('driver', id);
+  }
+
+  async restaurar(id: string) {
+    const motorista = await this.servicoPrisma.driver.findUnique({
+      where: { id },
+    });
+    if (!motorista) {
+      throw new NotFoundException('Driver not found');
+    }
+
+    return this.servicoSoftDelete.restaurar('driver', id);
+  }
+
+  async listarRemovidos(
+    page?: number,
+    pageSize?: number,
+  ): Promise<ResultadoPaginado<unknown>> {
+    const paginacao = normalizarPaginacao(page, pageSize);
+
+    const [dados, total] = await Promise.all([
+      this.servicoSoftDelete.listarRemovidos('driver', {
+        skip: (paginacao.page - 1) * paginacao.pageSize,
+        take: paginacao.pageSize,
+      }),
+      this.servicoSoftDelete.contarRemovidos('driver'),
+    ]);
+
+    return montarPaginacao(dados, total, paginacao.page, paginacao.pageSize);
+  }
+
+  async removerPermanentemente(id: string): Promise<void> {
+    const motorista = await this.servicoPrisma.driver.findUnique({
+      where: { id },
+    });
+    if (!motorista) {
+      throw new NotFoundException('Driver not found');
+    }
+    await this.servicoSoftDelete.removerPermanentemente('driver', id);
+  }
+
+  private async validarLicenseNumberLivre(
+    licenseNumber: string,
+    idAtual: string,
+  ): Promise<void> {
+    const existente = await this.servicoPrisma.driver.findUnique({
+      where: { licenseNumber },
+    });
+    if (existente && existente.id !== idAtual) {
+      throw new ConflictException('License number already registered');
+    }
+  }
+}
