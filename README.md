@@ -152,7 +152,7 @@ npm test
 npm run test:e2e
 ```
 
-No estado atual do repositório: `npm test` roda **1 suíte / 1 teste** (o teste unitário de `AppController`), e `npm run test:e2e` roda **6 suítes / 99 testes**, cobrindo os fluxos de auth, RBAC, CRUD dos 7 recursos principais, soft delete, procedures/triggers e integração com ViaCEP.
+No estado atual do repositório: `npm test` roda **1 suíte / 1 teste** (o teste unitário de `AppController`), e `npm run test:e2e` roda **7 suítes / 124 testes** (`analytics`, `app`, `auth-api-key`, `permissions-delegation`, `soft-delete`, `trips-refuelings-incidents`, `vehicles-maintenances`), cobrindo os fluxos de auth, RBAC, delegação granular de permissão (`UserPermission`), CRUD dos 7 recursos principais, soft delete, procedures/triggers e integração com ViaCEP.
 
 ## Estrutura do projeto
 
@@ -167,6 +167,7 @@ src/
 ├── maintenances/  # Registro e acompanhamento de manutenções
 ├── incidents/     # Registro de incidentes, com upload opcional de foto
 ├── analytics/     # Indicadores de frota (consumo, distância, eficiência, incidentes)
+├── permissions/   # Delegação granular de permissões (UserPermission), ADMIN-only
 ├── external/
 │   └── viacep/    # Cliente HTTP para a API pública do ViaCEP
 ├── common/        # DTOs, interceptors, pipes, validators, utils e schemas compartilhados
@@ -175,7 +176,7 @@ src/
 └── generated/     # Prisma Client gerado (não editar manualmente)
 ```
 
-Cada módulo de recurso (`drivers`, `vehicles`, `trips`, `refuelings`, `maintenances`, `incidents`, `users`) segue o mesmo padrão: `*.controller.ts`, `*.service.ts`, `*.module.ts` e uma pasta `dto/`.
+Cada módulo de recurso (`drivers`, `vehicles`, `trips`, `refuelings`, `maintenances`, `incidents`, `users`, `permissions`) segue o mesmo padrão: `*.controller.ts`, `*.service.ts`, `*.module.ts` e uma pasta `dto/`.
 
 ## Autenticação
 
@@ -183,7 +184,7 @@ Fluxo real, em duas camadas:
 
 1. **Signup** (`POST /auth/signup`, público): cria um usuário com papel `DRIVER` fixo e devolve uma **API key em texto puro** (o banco guarda só o hash SHA-256 dela — ela não aparece de novo depois).
 2. **Login** (`POST /auth/login`): exige e-mail + senha no corpo **e** a API key no header `x-api-key`. Devolve um **JWT**.
-3. **Rotas de negócio**: exigem o JWT no header `Authorization: Bearer <token>`. Cada rota é restrita por papel (`@Roles(...)`) via `RolesGuard`.
+3. **Rotas de negócio**: exigem o JWT no header `Authorization: Bearer <token>`. Cada rota é restrita por papel fixo (`@Roles(...)`) ou por permissão delegável (`@Permissions(...)`), ambos avaliados pelo `RolesGuard` — ver [seção Endpoints](#endpoints) e `projectDocs/projeto-fleet-management.md` (seção 5) para o detalhe de qual mecanismo cada rota usa.
 4. **Renovação**: `PATCH /auth/regenerate-key` troca a API key (autenticado por `x-api-key`); `POST /auth/refresh-token` troca o JWT (autenticado por Bearer) — são rotas e credenciais diferentes, não confundir.
 
 Para o detalhe completo (guards, estratégias, matriz de permissões, RBAC) veja `markdown/SEGURANCA-E-AUTENTICACAO.md`.
@@ -222,9 +223,9 @@ Autenticação: **pública** (sem guard), **API key** (header `x-api-key`) ou **
 | GET | `/drivers` | ADMIN, FLEET_MANAGER |
 | GET | `/drivers/deleted/all` | ADMIN |
 | GET | `/drivers/:id` | ADMIN, FLEET_MANAGER |
-| POST | `/drivers` | ADMIN |
-| PATCH | `/drivers/:id` | ADMIN |
-| PUT | `/drivers/:id` | ADMIN |
+| POST | `/drivers` | ADMIN, FLEET_MANAGER (permissão `DRIVER_CREATE`) |
+| PATCH | `/drivers/:id` | ADMIN, FLEET_MANAGER (permissão `DRIVER_UPDATE`) |
+| PUT | `/drivers/:id` | ADMIN, FLEET_MANAGER (permissão `DRIVER_UPDATE`) |
 | DELETE | `/drivers/:id` | ADMIN |
 | PATCH | `/drivers/:id/restore` | ADMIN |
 | DELETE | `/drivers/:id/permanent` | ADMIN |
@@ -309,7 +310,18 @@ Todas as rotas exigem ADMIN ou FLEET_MANAGER.
 | GET | `/analytics/driver/:id/trips` |
 | GET | `/analytics/incidents/severity` |
 
-**Total: 70 rotas de negócio** nos 9 controllers acima (o `GET /` da raiz é só o placeholder padrão do `nest new`, não faz parte da API de negócio).
+### Permissions (`/permissions`)
+
+Gestão da delegação granular de permissões (tabela `user_permissions`). Todas as rotas são `ADMIN`-only via `@Roles('ADMIN')` — a própria concessão nunca é delegável, para não permitir escalonamento em cadeia.
+
+| Método | Rota | Papéis |
+|---|---|---|
+| GET | `/permissions` | ADMIN |
+| GET | `/users/:id/permissions` | ADMIN |
+| POST | `/users/:id/permissions` | ADMIN |
+| DELETE | `/users/:id/permissions/:code` | ADMIN |
+
+**Total: 74 rotas de negócio** nos 10 controllers acima (o `GET /` da raiz é só o placeholder padrão do `nest new`, não faz parte da API de negócio). Nas tabelas acima, "Papéis" lista quem tem acesso **por papel** (`@Roles(...)`, fixo) ou **por permissão** (`@Permissions(...)`, que também aceita delegação granular via `UserPermission` — ver seção 5 de `projectDocs/projeto-fleet-management.md` para o detalhe de qual mecanismo cada rota usa).
 
 ## Exemplos de uso (curl)
 
