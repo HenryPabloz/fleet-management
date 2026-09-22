@@ -1,13 +1,21 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
+import { join } from 'path';
 import { AppModule } from './app.module';
+import { garantirPastaDeUploads } from './incidents/utils/upload-incidents.config';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   // Adiciona headers de segurança padrão e desliga o X-Powered-By.
   app.use(helmet());
+
+  // Cria a pasta de uploads se não existir e serve os arquivos em /uploads/*
+  // (é assim que a photoUrl de um incidente funciona de verdade).
+  garantirPastaDeUploads();
+  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });
   // Faz o Nest fechar tudo direito (inclusive o banco) ao receber Ctrl+C ou SIGTERM.
   app.enableShutdownHooks();
   // Faz os decorators do DTO (ex: @IsEmail) valerem e recusa campos extras.

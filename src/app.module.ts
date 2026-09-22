@@ -9,6 +9,11 @@ import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { DriversModule } from './drivers/drivers.module';
+import { VehiclesModule } from './vehicles/vehicles.module';
+import { MaintenancesModule } from './maintenances/maintenances.module';
+import { TripsModule } from './trips/trips.module';
+import { RefuelingsModule } from './refuelings/refuelings.module';
+import { IncidentsModule } from './incidents/incidents.module';
 
 @Module({
   imports: [
@@ -29,6 +34,11 @@ import { DriversModule } from './drivers/drivers.module';
     AuthModule,
     UsersModule,
     DriversModule,
+    VehiclesModule,
+    MaintenancesModule,
+    TripsModule,
+    RefuelingsModule,
+    IncidentsModule,
   ],
   controllers: [AppController],
   providers: [
