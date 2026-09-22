@@ -89,13 +89,32 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
 
   afterAll(async () => {
     if (prisma && idsDeUsuarioParaLimpar.length > 0) {
-      // Apaga de verdade (driver antes de user, por causa da FK).
+      // audit_logs é append-only (trigger do banco bloqueia DELETE/UPDATE nela).
+      // Usuário com log de auditoria nunca pode ser apagado de vez: só dá pra soft-deletar.
+      const registrosComAuditLog = await prisma.auditLog.findMany({
+        where: { changedBy: { in: idsDeUsuarioParaLimpar } },
+        select: { changedBy: true },
+        distinct: ['changedBy'],
+      });
+      const idsParaSoftDelete = registrosComAuditLog.map((registro) => registro.changedBy);
+      const idsParaApagarDeVez = idsDeUsuarioParaLimpar.filter(
+        (id) => !idsParaSoftDelete.includes(id),
+      );
+
       await prisma.driver.deleteMany({
         where: { userId: { in: idsDeUsuarioParaLimpar } },
       });
-      await prisma.user.deleteMany({
-        where: { id: { in: idsDeUsuarioParaLimpar } },
-      });
+      if (idsParaSoftDelete.length > 0) {
+        await prisma.user.updateMany({
+          where: { id: { in: idsParaSoftDelete } },
+          data: { deletedAt: new Date() },
+        });
+      }
+      if (idsParaApagarDeVez.length > 0) {
+        await prisma.user.deleteMany({
+          where: { id: { in: idsParaApagarDeVez } },
+        });
+      }
     }
     if (app) {
       await app.close();
