@@ -7,9 +7,7 @@ import { ApiProperty } from '@nestjs/swagger';
  * `@Catch`/`useGlobalFilters` em `src/`), então toda `HttpException` lançada
  * pelos guards/services (e também o `ValidationPipe` global) cai no filtro
  * padrão do Nest, que devolve exatamente este formato — não é RFC 7807.
- * Existe um `ProblemDetailsDto` (RFC 7807) em `problem-details.schema.ts`
- * pronto para o dia em que um filtro assim for implementado; até lá, as
- * controllers devem referenciar este schema nas respostas de erro.
+ * As controllers devem referenciar este schema nas respostas de erro.
  */
 export class ErroPadraoDto {
   @ApiProperty({
