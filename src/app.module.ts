@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { validateConfig } from './config/configuration';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
@@ -18,6 +19,7 @@ import { TripsModule } from './trips/trips.module';
 import { RefuelingsModule } from './refuelings/refuelings.module';
 import { IncidentsModule } from './incidents/incidents.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -46,6 +48,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
     RefuelingsModule,
     IncidentsModule,
     AnalyticsModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [
@@ -54,6 +57,9 @@ import { AnalyticsModule } from './analytics/analytics.module';
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     // Loga método, rota, usuário, status e duração de cada requisição.
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
+    // Captura toda HttpException (e erro genérico) e devolve no formato
+    // RFC 7807 (Problem Details), substituindo o formato padrão do Nest.
+    { provide: APP_FILTER, useClass: GlobalExceptionFilter },
   ],
 })
 export class AppModule {}

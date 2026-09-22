@@ -37,7 +37,7 @@ import type { UsuarioLogado } from '../auth/interfaces/usuario-logado.interface'
 import type { ConfigVars } from '../config/configuration';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
-import { ErroPadraoDto } from '../common/swagger/erro-padrao.schema';
+import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
 import { CreateIncidentDto } from './dto/create-incident.dto';
 import { UpdateIncidentStatusDto } from './dto/update-incident-status.dto';
 import { ListIncidentQueryDto } from './dto/list-incident-query.dto';
@@ -89,7 +89,7 @@ const INCIDENT_SCHEMA = {
 // decisão de gestão; sem código de permission pra essas duas ações no seed).
 @ApiTags('incidents')
 @ApiBearerAuth('jwt')
-@ApiExtraModels(ErroPadraoDto, PaginacaoMetadataDto)
+@ApiExtraModels(ProblemDetailsDto, PaginacaoMetadataDto)
 @Controller('incidents')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class IncidentsController {
@@ -123,9 +123,9 @@ export class IncidentsController {
       ],
     },
   })
-  @ApiResponse({ status: 400, description: 'Filtro `vehicleId` fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Filtro `vehicleId` fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   listar(@Query() query: ListIncidentQueryDto) {
     return this.servicoIncidents.listar(
       query.page,
@@ -158,8 +158,8 @@ export class IncidentsController {
       ],
     },
   })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   listarRemovidos(@Query() paginacao: PaginationQueryDto) {
     return this.servicoIncidents.listarRemovidos(
       paginacao.page,
@@ -178,10 +178,10 @@ export class IncidentsController {
   })
   @ApiParam({ name: 'id', description: 'Id do incidente (UUID).', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Incidente encontrado.', schema: INCIDENT_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Incidente não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Incidente não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   buscarPorId(@Param('id', ParseUUIDPipe) id: string) {
     return this.servicoIncidents.buscarPorId(id);
   }
@@ -237,15 +237,15 @@ export class IncidentsController {
   @ApiResponse({
     status: 400,
     description: 'Corpo inválido, erro de validação da procedure, ou arquivo de tipo/tamanho inválido.',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: '`vehicleId` ou `driverId` não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: '`vehicleId` ou `driverId` não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({
     status: 409,
     description: 'Motorista inativo, ou `tripId` informado com motorista/status de viagem incompatíveis.',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   criar(
     @Body() dados: CreateIncidentDto,
@@ -286,11 +286,11 @@ export class IncidentsController {
   @ApiResponse({
     status: 400,
     description: 'Corpo inválido, ou transição inválida (status igual ou anterior ao atual).',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Incidente não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Incidente não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   atualizarStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dados: UpdateIncidentStatusDto,
@@ -315,10 +315,10 @@ export class IncidentsController {
   })
   @ApiParam({ name: 'id', description: 'Id do incidente (UUID).', format: 'uuid' })
   @ApiResponse({ status: 204, description: 'Incidente removido (sem corpo de resposta).' })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Incidente não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Incidente não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   async remover(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.servicoIncidents.remover(id);
   }
@@ -337,10 +337,10 @@ export class IncidentsController {
   })
   @ApiParam({ name: 'id', description: 'Id do incidente (UUID).', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Incidente restaurado.', schema: INCIDENT_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Incidente não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Incidente não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   restaurar(@Param('id', ParseUUIDPipe) id: string) {
     return this.servicoIncidents.restaurar(id);
   }
@@ -362,10 +362,10 @@ export class IncidentsController {
   })
   @ApiParam({ name: 'id', description: 'Id do incidente (UUID).', format: 'uuid' })
   @ApiResponse({ status: 204, description: 'Incidente apagado definitivamente (sem corpo de resposta).' })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Incidente não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Incidente não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   async removerPermanentemente(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.servicoIncidents.removerPermanentemente(id);
   }

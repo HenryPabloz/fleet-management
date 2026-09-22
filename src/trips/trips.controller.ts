@@ -30,7 +30,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UsuarioLogado } from '../auth/interfaces/usuario-logado.interface';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
-import { ErroPadraoDto } from '../common/swagger/erro-padrao.schema';
+import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
 import { CreateTripDto } from './dto/create-trip.dto';
 import { StartTripDto } from './dto/start-trip.dto';
 import { EndTripDto } from './dto/end-trip.dto';
@@ -105,7 +105,7 @@ const ERROS_DE_PROCEDURE_COMUNS =
 // administrativa; sem código de permission pra isso).
 @ApiTags('trips')
 @ApiBearerAuth('jwt')
-@ApiExtraModels(ErroPadraoDto, PaginacaoMetadataDto)
+@ApiExtraModels(ProblemDetailsDto, PaginacaoMetadataDto)
 @Controller('trips')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class TripsController {
@@ -137,9 +137,9 @@ export class TripsController {
       ],
     },
   })
-  @ApiResponse({ status: 400, description: 'Filtro `driverId`/`vehicleId` fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Filtro `driverId`/`vehicleId` fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   listar(@Query() query: ListTripQueryDto) {
     return this.servicoTrips.listar(
       query.page,
@@ -172,8 +172,8 @@ export class TripsController {
       ],
     },
   })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   listarRemovidos(@Query() paginacao: PaginationQueryDto) {
     return this.servicoTrips.listarRemovidos(paginacao.page, paginacao.pageSize);
   }
@@ -189,10 +189,10 @@ export class TripsController {
   })
   @ApiParam({ name: 'id', description: 'Id da viagem (UUID).', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Viagem encontrada.', schema: TRIP_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   buscarPorId(@Param('id', ParseUUIDPipe) id: string) {
     return this.servicoTrips.buscarPorId(id);
   }
@@ -228,25 +228,25 @@ export class TripsController {
     description:
       'Corpo inválido (ex: `startLocation`/`endLocation` não é um CEP válido ou não encontrado ' +
       'na API do ViaCEP), ou erro de validação da procedure (ex: quilometragem inicial negativa).',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso, ou motorista inativo.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: '`driverId` ou `vehicleId` não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso, ou motorista inativo.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: '`driverId` ou `vehicleId` não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({
     status: 409,
     description: 'Veículo indisponível (em uso, em manutenção ou fora de serviço), motorista inativo, CNH vencida, ou motorista/veículo já com viagem ativa.',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   @ApiResponse({
     status: 500,
     description: 'Erro de rede ao consultar a API do ViaCEP para resolver `startLocation`/`endLocation`.',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   @ApiResponse({
     status: 504,
     description: 'Timeout ou rate limit ao consultar a API do ViaCEP para resolver `startLocation`/`endLocation`.',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   criar(@Body() dados: CreateTripDto, @CurrentUser() usuario: UsuarioLogado) {
     return this.servicoTrips.criar(dados, usuario.userId);
@@ -270,11 +270,11 @@ export class TripsController {
   @ApiParam({ name: 'id', description: 'Id da viagem (UUID).', format: 'uuid' })
   @ApiBody({ type: StartTripDto })
   @ApiResponse({ status: 200, description: 'Viagem iniciada (status IN_PROGRESS).', schema: TRIP_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Corpo inválido, ou erro de validação da procedure (ex: quilometragem menor que a de início).', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 409, description: 'Viagem não está em status PLANNED.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Corpo inválido, ou erro de validação da procedure (ex: quilometragem menor que a de início).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 409, description: 'Viagem não está em status PLANNED.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   iniciar(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dados: StartTripDto,
@@ -301,11 +301,11 @@ export class TripsController {
   @ApiParam({ name: 'id', description: 'Id da viagem (UUID).', format: 'uuid' })
   @ApiBody({ type: EndTripDto })
   @ApiResponse({ status: 200, description: 'Viagem finalizada (status COMPLETED).', schema: TRIP_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Corpo inválido, ou erro de validação da procedure (ex: quilometragem final menor que a inicial).', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 409, description: 'Viagem não está em status IN_PROGRESS.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Corpo inválido, ou erro de validação da procedure (ex: quilometragem final menor que a inicial).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 409, description: 'Viagem não está em status IN_PROGRESS.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   finalizar(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dados: EndTripDto,
@@ -330,11 +330,11 @@ export class TripsController {
   })
   @ApiParam({ name: 'id', description: 'Id da viagem (UUID).', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Viagem cancelada (status CANCELLED).', schema: TRIP_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 409, description: 'Viagem já está em status COMPLETED ou CANCELLED.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 409, description: 'Viagem já está em status COMPLETED ou CANCELLED.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   cancelar(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() usuario: UsuarioLogado) {
     return this.servicoTrips.cancelar(id, usuario.userId);
   }
@@ -357,11 +357,11 @@ export class TripsController {
   })
   @ApiParam({ name: 'id', description: 'Id da viagem (UUID).', format: 'uuid' })
   @ApiResponse({ status: 204, description: 'Viagem removida (sem corpo de resposta).' })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 409, description: 'Viagem ainda está PLANNED ou IN_PROGRESS; cancele antes de remover.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 409, description: 'Viagem ainda está PLANNED ou IN_PROGRESS; cancele antes de remover.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   async remover(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.servicoTrips.remover(id);
   }
@@ -380,10 +380,10 @@ export class TripsController {
   })
   @ApiParam({ name: 'id', description: 'Id da viagem (UUID).', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Viagem restaurada.', schema: TRIP_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   restaurar(@Param('id', ParseUUIDPipe) id: string) {
     return this.servicoTrips.restaurar(id);
   }
@@ -404,11 +404,11 @@ export class TripsController {
   })
   @ApiParam({ name: 'id', description: 'Id da viagem (UUID).', format: 'uuid' })
   @ApiResponse({ status: 204, description: 'Viagem apagada definitivamente (sem corpo de resposta).' })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 409, description: 'Viagem tem incidentes associados.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 409, description: 'Viagem tem incidentes associados.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   async removerPermanentemente(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.servicoTrips.removerPermanentemente(id);
   }

@@ -11,7 +11,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Permissions } from '../auth/decorators/permissions.decorator';
-import { ErroPadraoDto } from '../common/swagger/erro-padrao.schema';
+import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
 import { AnalyticsService } from './analytics.service';
 import { DailyDistanceQueryDto } from './dto/daily-distance-query.dto';
 import { IncidentsSeverityQueryDto } from './dto/incidents-severity-query.dto';
@@ -50,8 +50,8 @@ export class AnalyticsController {
       },
     },
   })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   consumoDeCombustivelDaFrota() {
     return this.servicoAnalytics.consumoDeCombustivelDaFrota();
   }
@@ -86,9 +86,9 @@ export class AnalyticsController {
       },
     },
   })
-  @ApiResponse({ status: 400, description: '`days` fora do formato ou intervalo aceito.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: '`days` fora do formato ou intervalo aceito.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   distanciaDiaria(@Query() query: DailyDistanceQueryDto) {
     const dias = query.days ?? PADRAO_DE_DIAS;
     return this.servicoAnalytics.distanciaDiaria(dias);
@@ -123,10 +123,10 @@ export class AnalyticsController {
       },
     },
   })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Veículo não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Veículo não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   eficienciaDoVeiculo(@Param('id', ParseUUIDPipe) id: string) {
     return this.servicoAnalytics.eficienciaDoVeiculo(id);
   }
@@ -165,10 +165,10 @@ export class AnalyticsController {
       },
     },
   })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   estatisticasDeViagensDoMotorista(@Param('id', ParseUUIDPipe) id: string) {
     return this.servicoAnalytics.estatisticasDeViagensDoMotorista(id);
   }
@@ -202,8 +202,8 @@ export class AnalyticsController {
       },
     },
   })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   incidentesPorSeveridade(@Query() query: IncidentsSeverityQueryDto) {
     return this.servicoAnalytics.incidentesPorSeveridade(query.status);
   }

@@ -31,7 +31,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UsuarioLogado } from '../auth/interfaces/usuario-logado.interface';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
-import { ErroPadraoDto } from '../common/swagger/erro-padrao.schema';
+import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
 import { CreateMaintenanceDto } from './dto/create-maintenance.dto';
 import { ListMaintenanceQueryDto } from './dto/list-maintenance-query.dto';
 import { ReplaceMaintenanceDto } from './dto/replace-maintenance.dto';
@@ -79,7 +79,7 @@ const MAINTENANCE_SCHEMA = {
 // quem tiver a permission (ADMIN e FLEET_MANAGER por papel).
 @ApiTags('maintenances')
 @ApiBearerAuth('jwt')
-@ApiExtraModels(ErroPadraoDto, PaginacaoMetadataDto)
+@ApiExtraModels(ProblemDetailsDto, PaginacaoMetadataDto)
 @Controller('maintenances')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class MaintenancesController {
@@ -109,9 +109,9 @@ export class MaintenancesController {
       ],
     },
   })
-  @ApiResponse({ status: 400, description: 'Filtro `vehicleId` fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Filtro `vehicleId` fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   listar(@Query() query: ListMaintenanceQueryDto) {
     return this.servicoMaintenances.listar(
       query.page,
@@ -143,8 +143,8 @@ export class MaintenancesController {
       ],
     },
   })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   listarRemovidos(@Query() paginacao: PaginationQueryDto) {
     return this.servicoMaintenances.listarRemovidos(
       paginacao.page,
@@ -163,10 +163,10 @@ export class MaintenancesController {
   })
   @ApiParam({ name: 'id', description: 'Id da manutenção (UUID).', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Manutenção encontrada.', schema: MAINTENANCE_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Manutenção não encontrada.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Manutenção não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   buscarPorId(@Param('id', ParseUUIDPipe) id: string) {
     return this.servicoMaintenances.buscarPorId(id);
   }
@@ -193,14 +193,14 @@ export class MaintenancesController {
   @ApiResponse({
     status: 400,
     description: '`vehicleId` inexistente (ou removido), corpo inválido, ou violação de CHECK do banco.',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({
     status: 409,
     description: 'Sincronia com o veículo falhou (ex: veículo com viagem ativa).',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   criar(
     @Body() dados: CreateMaintenanceDto,
@@ -233,14 +233,14 @@ export class MaintenancesController {
   @ApiParam({ name: 'id', description: 'Id da manutenção (UUID).', format: 'uuid' })
   @ApiBody({ type: UpdateMaintenanceDto })
   @ApiResponse({ status: 200, description: 'Manutenção atualizada.', schema: MAINTENANCE_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Corpo inválido ou violação de CHECK do banco.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Manutenção não encontrada.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Corpo inválido ou violação de CHECK do banco.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Manutenção não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({
     status: 409,
     description: 'Sincronia com o veículo falhou ao concluir a manutenção (ex: veículo com viagem ativa).',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   atualizarParcial(
     @Param('id', ParseUUIDPipe) id: string,
@@ -271,14 +271,14 @@ export class MaintenancesController {
   @ApiParam({ name: 'id', description: 'Id da manutenção (UUID).', format: 'uuid' })
   @ApiBody({ type: ReplaceMaintenanceDto })
   @ApiResponse({ status: 200, description: 'Manutenção substituída.', schema: MAINTENANCE_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Corpo inválido ou violação de CHECK do banco.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Manutenção não encontrada.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Corpo inválido ou violação de CHECK do banco.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Manutenção não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({
     status: 409,
     description: 'Sincronia com o veículo falhou ao concluir a manutenção (ex: veículo com viagem ativa).',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   substituir(
     @Param('id', ParseUUIDPipe) id: string,
@@ -303,10 +303,10 @@ export class MaintenancesController {
   })
   @ApiParam({ name: 'id', description: 'Id da manutenção (UUID).', format: 'uuid' })
   @ApiResponse({ status: 204, description: 'Manutenção removida (sem corpo de resposta).' })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Manutenção não encontrada.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Manutenção não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   async remover(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.servicoMaintenances.remover(id);
   }
@@ -325,10 +325,10 @@ export class MaintenancesController {
   })
   @ApiParam({ name: 'id', description: 'Id da manutenção (UUID).', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Manutenção restaurada.', schema: MAINTENANCE_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Manutenção não encontrada.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Manutenção não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   restaurar(@Param('id', ParseUUIDPipe) id: string) {
     return this.servicoMaintenances.restaurar(id);
   }
@@ -349,10 +349,10 @@ export class MaintenancesController {
   })
   @ApiParam({ name: 'id', description: 'Id da manutenção (UUID).', format: 'uuid' })
   @ApiResponse({ status: 204, description: 'Manutenção apagada definitivamente (sem corpo de resposta).' })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Manutenção não encontrada.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Manutenção não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   async removerPermanentemente(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {

@@ -19,13 +19,12 @@ export interface ConfigVars {
     region: string;
     s3Bucket: string;
   };
-  // gcp: {
-  //   projectId: string;
-  //   keyFile: string;
-  // };
   external: {
     cepApiUrl: string;
     cepTimeoutMs: number;
+  };
+  cors: {
+    origin: string;
   };
 }
 
@@ -50,10 +49,11 @@ export function validateConfig(config: Record<string, unknown>): ConfigVars {
     AWS_SECRET_ACCESS_KEY: joi.string().allow('').optional(),
     AWS_REGION: joi.string().allow('').optional(),
     AWS_S3_BUCKET: joi.string().allow('').optional(),
-    // GOOGLE_CLOUD_PROJECT_ID: joi.string().optional(),
-    // GOOGLE_CLOUD_KEY_FILE: joi.string().optional(),
     CEP_API_URL: joi.string().default('https://viacep.com.br/ws'),
     CEP_TIMEOUT_MS: joi.number().default(10000),
+    // "*" libera qualquer origem (uso em dev); em produção, lista separada por
+    // vírgula com os domínios do frontend (ex: "https://app.com,https://admin.app.com").
+    CORS_ORIGIN: joi.string().default('*'),
   });
 
   const { value, error } = schema.validate(config, { allowUnknown: true });
@@ -72,13 +72,12 @@ export function validateConfig(config: Record<string, unknown>): ConfigVars {
       region: value.AWS_REGION,
       s3Bucket: value.AWS_S3_BUCKET,
     },
-    // gcp: {
-    //   projectId: value.GOOGLE_CLOUD_PROJECT_ID,
-    //   keyFile: value.GOOGLE_CLOUD_KEY_FILE,
-    // },
     external: {
       cepApiUrl: value.CEP_API_URL,
       cepTimeoutMs: value.CEP_TIMEOUT_MS,
+    },
+    cors: {
+      origin: value.CORS_ORIGIN,
     },
   };
 }

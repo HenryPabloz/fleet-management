@@ -7,7 +7,6 @@ import {
   IsOptional,
   IsString,
   Length,
-  Matches,
   Max,
   MaxLength,
   Min,
@@ -15,6 +14,7 @@ import {
 import { STATUS_VEHICLE_ACEITOS_NA_ESCRITA } from './status-vehicle-escrita.constant';
 import type { StatusVehicleEscrita } from './status-vehicle-escrita.constant';
 import { IsValidCep } from '../../common/validators/is-valid-cep.validator';
+import { IsValidPlaca } from '../../common/validators/is-valid-placa.validator';
 
 export class CreateVehicleDto {
   // O CHECK do banco exige maiúsculo/trim; validamos aqui também para dar erro claro.
@@ -26,10 +26,7 @@ export class CreateVehicleDto {
   })
   @IsString()
   @Length(7, 8)
-  @Matches(/^([A-Z]{3}[0-9][A-Z][0-9]{2}|[A-Z]{3}-?[0-9]{4})$/, {
-    message:
-      'Plate must be in Mercosul format (ABC1D23) or the old format (ABC1234 or ABC-1234)',
-  })
+  @IsValidPlaca()
   plate!: string;
 
   @Transform(({ value }) => {

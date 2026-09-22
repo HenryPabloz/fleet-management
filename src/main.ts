@@ -1,5 +1,6 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
 import { useContainer } from 'class-validator';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -7,6 +8,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import { join } from 'path';
 import { AppModule } from './app.module';
+import { ConfigVars } from './config/configuration';
 import { garantirPastaDeUploads } from './incidents/utils/upload-incidents.config';
 
 async function bootstrap() {
@@ -15,6 +17,18 @@ async function bootstrap() {
   app.use(helmet());
   // Comprime as respostas (gzip) quando o cliente aceita.
   app.use(compression());
+
+  // CORS_ORIGIN="*" libera qualquer origem (dev); em produção, use uma lista
+  // de domínios separados por vírgula. O navegador rejeita "*" junto com
+  // credentials: true, então credentials só liga quando a origem é restrita.
+  const servicoDeConfiguracao = app.get(ConfigService<ConfigVars, true>);
+  const origemCors = servicoDeConfiguracao.get('cors.origin', { infer: true });
+  if (origemCors === '*') {
+    app.enableCors({ origin: '*' });
+  } else {
+    const origensPermitidas = origemCors.split(',').map((origem) => origem.trim());
+    app.enableCors({ origin: origensPermitidas, credentials: true });
+  }
 
   // Cria a pasta de uploads se não existir e serve os arquivos em /uploads/*
   // (é assim que a photoUrl de um incidente funciona de verdade).

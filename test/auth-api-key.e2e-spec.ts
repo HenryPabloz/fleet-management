@@ -205,7 +205,7 @@ describe('Auth com X-API-KEY (e2e)', () => {
         email,
         password: SENHA,
       }).expect(401);
-      expect(resposta.body.message).toEqual('API key required');
+      expect(resposta.body.detail).toEqual('API key required');
     });
 
     it('401 com chave inexistente, mal formada ou repetida', async () => {
@@ -226,8 +226,8 @@ describe('Auth com X-API-KEY (e2e)', () => {
         password: SENHA,
       }).expect(401);
 
-      expect(senhaErrada.body.message).toEqual('Invalid credentials');
-      expect(emailInexistente.body.message).toEqual('Invalid credentials');
+      expect(senhaErrada.body.detail).toEqual('Invalid credentials');
+      expect(emailInexistente.body.detail).toEqual('Invalid credentials');
     });
 
     it('401 se a chave for de outro usuário', async () => {
@@ -239,7 +239,7 @@ describe('Auth com X-API-KEY (e2e)', () => {
         email,
         password: SENHA,
       }).expect(401);
-      expect(resposta.body.message).toEqual('Invalid credentials');
+      expect(resposta.body.detail).toEqual('Invalid credentials');
     });
 
     it('403 para usuário inativo', async () => {
@@ -254,7 +254,7 @@ describe('Auth com X-API-KEY (e2e)', () => {
         email: emailInativo,
         password: SENHA,
       }).expect(403);
-      expect(resposta.body.message).toEqual('User account is inactive');
+      expect(resposta.body.detail).toEqual('User account is inactive');
     });
 
     it('400 com corpo inválido (chave certa)', async () => {

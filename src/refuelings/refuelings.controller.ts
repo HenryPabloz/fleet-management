@@ -30,7 +30,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UsuarioLogado } from '../auth/interfaces/usuario-logado.interface';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
-import { ErroPadraoDto } from '../common/swagger/erro-padrao.schema';
+import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
 import { CreateRefuelingDto } from './dto/create-refueling.dto';
 import { ListRefuelingQueryDto } from './dto/list-refueling-query.dto';
 import { RefuelingsService } from './refuelings.service';
@@ -77,7 +77,7 @@ const REFUELING_SCHEMA = {
 // (motorista registra o próprio abastecimento). Remoção: só ADMIN.
 @ApiTags('refuelings')
 @ApiBearerAuth('jwt')
-@ApiExtraModels(ErroPadraoDto, PaginacaoMetadataDto)
+@ApiExtraModels(ProblemDetailsDto, PaginacaoMetadataDto)
 @Controller('refuelings')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class RefuelingsController {
@@ -107,9 +107,9 @@ export class RefuelingsController {
       ],
     },
   })
-  @ApiResponse({ status: 400, description: 'Filtro `vehicleId`/`driverId` fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Filtro `vehicleId`/`driverId` fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   listar(@Query() query: ListRefuelingQueryDto) {
     return this.servicoRefuelings.listar(
       query.page,
@@ -141,8 +141,8 @@ export class RefuelingsController {
       ],
     },
   })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   listarRemovidos(@Query() paginacao: PaginationQueryDto) {
     return this.servicoRefuelings.listarRemovidos(
       paginacao.page,
@@ -161,10 +161,10 @@ export class RefuelingsController {
   })
   @ApiParam({ name: 'id', description: 'Id do abastecimento (UUID).', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Abastecimento encontrado.', schema: REFUELING_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Abastecimento não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Abastecimento não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   buscarPorId(@Param('id', ParseUUIDPipe) id: string) {
     return this.servicoRefuelings.buscarPorId(id);
   }
@@ -196,14 +196,14 @@ export class RefuelingsController {
   })
   @ApiBody({ type: CreateRefuelingDto })
   @ApiResponse({ status: 201, description: 'Abastecimento registrado.', schema: REFUELING_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Corpo inválido, ou erro de validação da procedure (ex: litros/preço fora do limite, tipo de combustível inválido).', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: '`vehicleId` ou `driverId` não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Corpo inválido, ou erro de validação da procedure (ex: litros/preço fora do limite, tipo de combustível inválido).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: '`vehicleId` ou `driverId` não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({
     status: 409,
     description: 'Motorista inativo, quilometragem informada menor que a atual do veículo, ou motorista não corresponde à viagem ativa do veículo.',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   criar(@Body() dados: CreateRefuelingDto, @CurrentUser() usuario: UsuarioLogado) {
     return this.servicoRefuelings.criar(dados, usuario.userId);
@@ -224,10 +224,10 @@ export class RefuelingsController {
   })
   @ApiParam({ name: 'id', description: 'Id do abastecimento (UUID).', format: 'uuid' })
   @ApiResponse({ status: 204, description: 'Abastecimento removido (sem corpo de resposta).' })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Abastecimento não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Abastecimento não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   async remover(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.servicoRefuelings.remover(id);
   }
@@ -246,10 +246,10 @@ export class RefuelingsController {
   })
   @ApiParam({ name: 'id', description: 'Id do abastecimento (UUID).', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Abastecimento restaurado.', schema: REFUELING_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Abastecimento não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Abastecimento não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   restaurar(@Param('id', ParseUUIDPipe) id: string) {
     return this.servicoRefuelings.restaurar(id);
   }
@@ -270,10 +270,10 @@ export class RefuelingsController {
   })
   @ApiParam({ name: 'id', description: 'Id do abastecimento (UUID).', format: 'uuid' })
   @ApiResponse({ status: 204, description: 'Abastecimento apagado definitivamente (sem corpo de resposta).' })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Abastecimento não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Abastecimento não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   async removerPermanentemente(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.servicoRefuelings.removerPermanentemente(id);
   }

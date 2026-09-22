@@ -6,9 +6,9 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  Matches,
   MaxLength,
 } from 'class-validator';
+import { IsValidCnh } from '../../common/validators/is-valid-cnh.validator';
 
 // PATCH: userId não entra aqui de propósito, o vínculo é fixo após criado.
 export class UpdateDriverDto {
@@ -27,9 +27,7 @@ export class UpdateDriverDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
-  @Matches(/^[0-9]{11}$/, {
-    message: 'License number must be exactly 11 digits (CNH format)',
-  })
+  @IsValidCnh()
   licenseNumber?: string;
 
   @ApiPropertyOptional({

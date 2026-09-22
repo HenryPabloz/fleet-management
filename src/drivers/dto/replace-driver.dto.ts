@@ -5,9 +5,9 @@ import {
   IsISO8601,
   IsNotEmpty,
   IsString,
-  Matches,
   MaxLength,
 } from 'class-validator';
+import { IsValidCnh } from '../../common/validators/is-valid-cnh.validator';
 
 // PUT: substitui todos os campos editáveis, todos obrigatórios.
 // userId não entra aqui de propósito, o vínculo é fixo após criado.
@@ -26,9 +26,7 @@ export class ReplaceDriverDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
-  @Matches(/^[0-9]{11}$/, {
-    message: 'License number must be exactly 11 digits (CNH format)',
-  })
+  @IsValidCnh()
   licenseNumber!: string;
 
   @ApiProperty({

@@ -26,7 +26,7 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
   }
 
   function novaPlaca(): string {
-    // Formato antigo (3 letras + 4 números), aceito pelo CHECK do banco e pelo @Matches do DTO.
+    // Formato antigo (3 letras + 4 números), aceito pelo CHECK do banco e pelo validador IsValidPlaca.
     const letras = Array.from({ length: 3 }, () =>
       String.fromCharCode(65 + Math.floor(Math.random() * 26)),
     ).join('');
@@ -39,7 +39,7 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
   }
 
   function novaCnh(): string {
-    // 11 dígitos, formato exigido pelo @Matches do DTO.
+    // 11 dígitos, formato exigido pelo validador IsValidCnh.
     return randomBytes(6).readUIntBE(0, 6).toString().padStart(11, '0').slice(-11);
   }
 
@@ -426,7 +426,7 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
         'delete',
         `/users/${idUsuarioCriador}/permanent`,
       ).expect(409);
-      expect(resposta.body.message).toContain('associated history');
+      expect(resposta.body.detail).toContain('associated history');
 
       const usuarioNoBanco = await prisma.user.findUnique({
         where: { id: idUsuarioCriador },

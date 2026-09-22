@@ -29,7 +29,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
-import { ErroPadraoDto } from '../common/swagger/erro-padrao.schema';
+import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { DriverRespostaDto } from './dto/driver-response.dto';
 import { ReplaceDriverDto } from './dto/replace-driver.dto';
@@ -57,7 +57,7 @@ const QUERY_PAGE_SIZE = {
 // (ADMIN e FLEET_MANAGER por papel; outros papéis podem receber via delegação).
 @ApiTags('drivers')
 @ApiBearerAuth('jwt')
-@ApiExtraModels(ErroPadraoDto, PaginacaoMetadataDto, DriverRespostaDto)
+@ApiExtraModels(ProblemDetailsDto, PaginacaoMetadataDto, DriverRespostaDto)
 @Controller('drivers')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class DriversController {
@@ -88,8 +88,8 @@ export class DriversController {
       ],
     },
   })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   listar(@Query() paginacao: PaginationQueryDto) {
     return this.servicoDrivers.listar(paginacao.page, paginacao.pageSize);
   }
@@ -120,8 +120,8 @@ export class DriversController {
       ],
     },
   })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   listarRemovidos(@Query() paginacao: PaginationQueryDto) {
     return this.servicoDrivers.listarRemovidos(
       paginacao.page,
@@ -140,10 +140,10 @@ export class DriversController {
   })
   @ApiParam({ name: 'id', description: 'Id do motorista (UUID).', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Motorista encontrado.', type: DriverRespostaDto })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   buscarPorId(@Param('id', ParseUUIDPipe) id: string) {
     return this.servicoDrivers.buscarPorId(id);
   }
@@ -166,14 +166,14 @@ export class DriversController {
   @ApiResponse({
     status: 400,
     description: '`userId` inexistente (ou removido), `licenseExpiry` no passado, ou corpo inválido.',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({
     status: 409,
     description: 'O usuário já tem motorista, ou o número da CNH já está cadastrado.',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   criar(@Body() dados: CreateDriverDto) {
     return this.servicoDrivers.criar(dados);
@@ -195,11 +195,11 @@ export class DriversController {
   @ApiParam({ name: 'id', description: 'Id do motorista (UUID).', format: 'uuid' })
   @ApiBody({ type: UpdateDriverDto })
   @ApiResponse({ status: 200, description: 'Motorista atualizado.', type: DriverRespostaDto })
-  @ApiResponse({ status: 400, description: 'Corpo inválido.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 409, description: 'Número da CNH já cadastrado para outro motorista.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Corpo inválido.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 409, description: 'Número da CNH já cadastrado para outro motorista.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   atualizarParcial(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dados: UpdateDriverDto,
@@ -224,11 +224,11 @@ export class DriversController {
   @ApiParam({ name: 'id', description: 'Id do motorista (UUID).', format: 'uuid' })
   @ApiBody({ type: ReplaceDriverDto })
   @ApiResponse({ status: 200, description: 'Motorista substituído.', type: DriverRespostaDto })
-  @ApiResponse({ status: 400, description: 'Corpo inválido.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 409, description: 'Número da CNH já cadastrado para outro motorista.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Corpo inválido.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 409, description: 'Número da CNH já cadastrado para outro motorista.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   substituir(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dados: ReplaceDriverDto,
@@ -251,10 +251,10 @@ export class DriversController {
   })
   @ApiParam({ name: 'id', description: 'Id do motorista (UUID).', format: 'uuid' })
   @ApiResponse({ status: 204, description: 'Motorista removido (sem corpo de resposta).' })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   async remover(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     await this.servicoDrivers.remover(id);
   }
@@ -273,10 +273,10 @@ export class DriversController {
   })
   @ApiParam({ name: 'id', description: 'Id do motorista (UUID).', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Motorista restaurado.', type: DriverRespostaDto })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   restaurar(@Param('id', ParseUUIDPipe) id: string) {
     return this.servicoDrivers.restaurar(id);
   }
@@ -297,10 +297,10 @@ export class DriversController {
   })
   @ApiParam({ name: 'id', description: 'Id do motorista (UUID).', format: 'uuid' })
   @ApiResponse({ status: 204, description: 'Motorista apagado definitivamente (sem corpo de resposta).' })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   async removerPermanentemente(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {

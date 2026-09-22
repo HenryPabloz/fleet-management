@@ -22,7 +22,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { ErroPadraoDto } from '../common/swagger/erro-padrao.schema';
+import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
 import { ConcederPermissionDto } from './dto/conceder-permission.dto';
 import { PermissionRespostaDto, PermissoesDoUsuarioRespostaDto } from './dto/permission-response.dto';
 import { PermissionsService } from './permissions.service';
@@ -33,7 +33,7 @@ import { PermissionsService } from './permissions.service';
 // pode, por causa disso, conceder permissões pra ninguém).
 @ApiTags('permissions')
 @ApiBearerAuth('jwt')
-@ApiExtraModels(ErroPadraoDto, PermissionRespostaDto, PermissoesDoUsuarioRespostaDto)
+@ApiExtraModels(ProblemDetailsDto, PermissionRespostaDto, PermissoesDoUsuarioRespostaDto)
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PermissionsController {
@@ -49,8 +49,8 @@ export class PermissionsController {
     ...({ 'x-database-tables': { read: ['permissions'] } } as Record<string, unknown>),
   })
   @ApiResponse({ status: 200, description: 'Catálogo de permissões.', type: [PermissionRespostaDto] })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   listarCatalogo() {
     return this.servicoPermissions.listarCatalogo();
   }
@@ -69,10 +69,10 @@ export class PermissionsController {
   })
   @ApiParam({ name: 'id', description: 'Id do usuário (UUID).', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Permissões efetivas do usuário.', type: PermissoesDoUsuarioRespostaDto })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Usuário não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Usuário não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   listarPermissoesDoUsuario(@Param('id', ParseUUIDPipe) id: string) {
     return this.servicoPermissions.listarPermissoesDoUsuario(id);
   }
@@ -94,10 +94,10 @@ export class PermissionsController {
   @ApiParam({ name: 'id', description: 'Id do usuário (UUID).', format: 'uuid' })
   @ApiBody({ type: ConcederPermissionDto })
   @ApiResponse({ status: 200, description: 'Permissão concedida (ou já estava). Devolve as permissões efetivas atualizadas.', type: PermissoesDoUsuarioRespostaDto })
-  @ApiResponse({ status: 400, description: 'Corpo inválido ou `permissionCode` inexistente.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Usuário não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Corpo inválido ou `permissionCode` inexistente.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Usuário não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   conceder(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dados: ConcederPermissionDto,
@@ -123,10 +123,10 @@ export class PermissionsController {
   @ApiParam({ name: 'id', description: 'Id do usuário (UUID).', format: 'uuid' })
   @ApiParam({ name: 'code', description: 'Código da permissão a revogar.', example: 'USER_CREATE' })
   @ApiResponse({ status: 204, description: 'Permissão revogada (ou já não estava concedida). Sem corpo de resposta.' })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
-  @ApiResponse({ status: 404, description: 'Usuário não encontrado.', schema: { $ref: getSchemaPath(ErroPadraoDto) } })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Usuário não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   async revogar(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('code') code: string,

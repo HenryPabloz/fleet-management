@@ -7,9 +7,9 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  Matches,
   MaxLength,
 } from 'class-validator';
+import { IsValidCnh } from '../../common/validators/is-valid-cnh.validator';
 
 export class CreateDriverDto {
   // Vincula a um User já existente; um user só pode ter 1 driver.
@@ -34,9 +34,7 @@ export class CreateDriverDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
-  @Matches(/^[0-9]{11}$/, {
-    message: 'License number must be exactly 11 digits (CNH format)',
-  })
+  @IsValidCnh()
   licenseNumber!: string;
 
   // IsISO8601 (em vez de IsDateString) porque aceita data pura ("2026-01-01")

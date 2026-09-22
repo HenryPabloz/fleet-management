@@ -18,7 +18,7 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { ErroPadraoDto } from '../common/swagger/erro-padrao.schema';
+import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
 import { NomePipe } from '../common/pipes/name-pipe';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -32,7 +32,7 @@ import { JwtAuthGuard } from './guards/jwt.guard';
 import type { UsuarioLogado } from './interfaces/usuario-logado.interface';
 
 @ApiTags('auth')
-@ApiExtraModels(ErroPadraoDto)
+@ApiExtraModels(ProblemDetailsDto)
 @Controller('auth')
 export class AuthController {
   constructor(private servicoAuth: AuthService) {}
@@ -59,12 +59,12 @@ export class AuthController {
   @ApiResponse({
     status: 400,
     description: 'Corpo da requisição inválido (ex: e-mail mal formatado, senha curta).',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   @ApiResponse({
     status: 409,
     description: 'E-mail já cadastrado.',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   async signup(
     @Body() dadosCadastro: SignupDto,
@@ -95,18 +95,18 @@ export class AuthController {
   @ApiResponse({
     status: 400,
     description: 'Corpo da requisição inválido (e-mail ou senha fora do formato esperado).',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   @ApiResponse({
     status: 401,
     description:
       'API key ausente/inválida, ou e-mail/senha/chave não conferem entre si.',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   @ApiResponse({
     status: 403,
     description: 'A conta dona da API key está inativa.',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   async loginWithApiKey(
     @Body() dadosLogin: LoginWithApiKeyDto,
@@ -139,12 +139,12 @@ export class AuthController {
   @ApiResponse({
     status: 401,
     description: 'API key ausente ou inválida.',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   @ApiResponse({
     status: 403,
     description: 'A conta dona da API key está inativa.',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   async regenerateApiKey(
     @CurrentUser() usuario: UsuarioLogado,
@@ -174,7 +174,7 @@ export class AuthController {
   @ApiResponse({
     status: 401,
     description: 'Token ausente, inválido, expirado, ou dono do token inativo/inexistente.',
-    schema: { $ref: getSchemaPath(ErroPadraoDto) },
+    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   async refreshToken(
     @CurrentUser() usuario: UsuarioLogado,
