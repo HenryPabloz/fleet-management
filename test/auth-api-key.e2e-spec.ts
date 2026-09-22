@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { useContainer } from 'class-validator';
 import { JwtService } from '@nestjs/jwt';
 import { randomBytes } from 'crypto';
 import request from 'supertest';
@@ -67,6 +68,7 @@ describe('Auth com X-API-KEY (e2e)', () => {
         transform: true,
       }),
     );
+    useContainer(app.select(AppModule), { fallbackOnErrors: true });
     await app.init();
 
     prisma = app.get(PrismaService);

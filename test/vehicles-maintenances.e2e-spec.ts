@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { useContainer } from 'class-validator';
 import { JwtService } from '@nestjs/jwt';
 import { randomBytes } from 'crypto';
 import request from 'supertest';
@@ -86,6 +87,7 @@ describe('Vehicles e Maintenances (e2e)', () => {
         transform: true,
       }),
     );
+    useContainer(app.select(AppModule), { fallbackOnErrors: true });
     await app.init();
 
     prisma = app.get(PrismaService);
@@ -319,8 +321,8 @@ describe('Vehicles e Maintenances (e2e)', () => {
           vehicleId: veiculo.id,
           status: 'PLANNED',
           startKm: veiculo.currentMileage,
-          startLocation: 'Origem E2E',
-          endLocation: 'Destino E2E',
+          startLocation: 'São Paulo, SP',
+          endLocation: 'Rio de Janeiro, RJ',
           createdBy: userIdAdmin,
         },
       });
@@ -639,6 +641,73 @@ describe('Vehicles e Maintenances (e2e)', () => {
 
     it('GET /maintenances sem token dá 401', async () => {
       await request(app.getHttpServer()).get('/maintenances').expect(401);
+    });
+  });
+
+  // Chamada real à API do ViaCEP, sem mock. O campo é opcional e só enriquece
+  // a resposta; não vira coluna no banco (por isso não conferimos o Prisma aqui).
+  describe('Vehicles: initialLocationCep (ViaCEP)', () => {
+    it('POST /vehicles com initialLocationCep válido devolve initialLocation enriquecido', async () => {
+      const resposta = await autenticado(tokenAdmin, 'post', '/vehicles')
+        .send({
+          plate: novaPlaca(),
+          model: 'Fiat Strada',
+          year: 2022,
+          currentMileage: 1000,
+          initialLocationCep: '01310-100',
+        })
+        .expect(201);
+      idsDeVeiculoParaLimpar.push(resposta.body.id);
+
+      expect(resposta.body.initialLocation).toBeDefined();
+      expect(resposta.body.initialLocation.localidade).toEqual('São Paulo');
+      expect(resposta.body.initialLocation.uf).toEqual('SP');
+    });
+
+    it('POST /vehicles com initialLocationCep inválido dá 400', async () => {
+      await autenticado(tokenAdmin, 'post', '/vehicles')
+        .send({
+          plate: novaPlaca(),
+          model: 'Fiat Strada',
+          year: 2022,
+          currentMileage: 1000,
+          initialLocationCep: '00000-000',
+        })
+        .expect(400);
+    });
+
+    it('POST /vehicles sem initialLocationCep continua funcionando normalmente', async () => {
+      const resposta = await autenticado(tokenAdmin, 'post', '/vehicles')
+        .send({
+          plate: novaPlaca(),
+          model: 'Fiat Strada',
+          year: 2022,
+          currentMileage: 1000,
+        })
+        .expect(201);
+      idsDeVeiculoParaLimpar.push(resposta.body.id);
+
+      expect(resposta.body.initialLocation).toBeUndefined();
+    });
+  });
+
+  describe('Vehicles: filtro por status na listagem', () => {
+    it('GET /vehicles?status=AVAILABLE só devolve veículos AVAILABLE', async () => {
+      const disponivel = await criarVeiculo({ status: 'AVAILABLE' });
+      const emManutencao = await criarVeiculo({ status: 'IN_MAINTENANCE' });
+
+      const resposta = await autenticado(
+        tokenAdmin,
+        'get',
+        '/vehicles?status=AVAILABLE&pageSize=100',
+      ).expect(200);
+
+      const ids = resposta.body.data.map((item: { id: string }) => item.id);
+      expect(ids).toContain(disponivel.id);
+      expect(ids).not.toContain(emManutencao.id);
+      for (const veiculo of resposta.body.data) {
+        expect(veiculo.status).toEqual('AVAILABLE');
+      }
     });
   });
 });

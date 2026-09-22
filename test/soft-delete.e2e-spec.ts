@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { useContainer } from 'class-validator';
 import { randomBytes } from 'crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -61,6 +62,7 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
         transform: true,
       }),
     );
+    useContainer(app.select(AppModule), { fallbackOnErrors: true });
     await app.init();
 
     prisma = app.get(PrismaService);
@@ -392,8 +394,8 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
           vehicleId: veiculo.id,
           status: 'PLANNED',
           startKm: veiculo.currentMileage,
-          startLocation: 'Origem E2E',
-          endLocation: 'Destino E2E',
+          startLocation: 'São Paulo, SP',
+          endLocation: 'Belo Horizonte, MG',
           createdBy: idUsuarioCriador,
         },
       });

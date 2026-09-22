@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ValidationPipe } from '@nestjs/common';
+import { useContainer } from 'class-validator';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { JwtService } from '@nestjs/jwt';
 import { randomBytes } from 'crypto';
@@ -8,6 +9,7 @@ import { join } from 'path';
 import request from 'supertest';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/database/prisma.service';
+import { ViaCepService } from './../src/external/viacep/via-cep.service';
 import { garantirPastaDeUploads } from './../src/incidents/utils/upload-incidents.config';
 
 const SENHA = 'SenhaForte123';
@@ -24,6 +26,7 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
   let app: NestExpressApplication;
   let prisma: PrismaService;
   let servicoJwt: JwtService;
+  let servicoViaCep: ViaCepService;
   let tokenAdmin: string;
   let roleIdDriver: string;
 
@@ -121,10 +124,12 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
       }),
     );
     app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });
+    useContainer(app.select(AppModule), { fallbackOnErrors: true });
     await app.init();
 
     prisma = app.get(PrismaService);
     servicoJwt = app.get(JwtService);
+    servicoViaCep = app.get(ViaCepService);
 
     const respostaLogin = await request(app.getHttpServer())
       .post('/auth/login')
@@ -185,8 +190,8 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
           driverId: driver.id,
           vehicleId: veiculo.id,
           startKm: 10000,
-          startLocation: 'Origem E2E',
-          endLocation: 'Destino E2E',
+          startLocation: '01310-100',
+          endLocation: '20040-020',
         })
         .expect(201);
       idsDeTripParaLimpar.push(trip.body.id);
@@ -269,8 +274,8 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
           driverId: driver.id,
           vehicleId: veiculo.id,
           startKm: veiculo.currentMileage,
-          startLocation: 'Origem',
-          endLocation: 'Destino',
+          startLocation: '30130-010',
+          endLocation: '01310-100',
         })
         .expect(201);
       idsDeTripParaLimpar.push(trip.body.id);
@@ -293,8 +298,8 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
           driverId: driver.id,
           vehicleId: veiculo.id,
           startKm: veiculo.currentMileage,
-          startLocation: 'Origem',
-          endLocation: 'Destino',
+          startLocation: '20040-020',
+          endLocation: '30130-010',
         })
         .expect(201);
       idsDeTripParaLimpar.push(trip.body.id);
@@ -320,8 +325,8 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
           driverId: driver.id,
           vehicleId: veiculo.id,
           startKm: veiculo.currentMileage,
-          startLocation: 'Origem',
-          endLocation: 'Destino',
+          startLocation: '01310-100',
+          endLocation: '30130-010',
         })
         .expect(201);
       idsDeTripParaLimpar.push(trip.body.id);
@@ -344,8 +349,8 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
           driverId: driver.id,
           vehicleId: '00000000-0000-0000-0000-000000000000',
           startKm: 0,
-          startLocation: 'Origem',
-          endLocation: 'Destino',
+          startLocation: '01310-100',
+          endLocation: '20040-020',
         })
         .expect(404);
     });
@@ -418,6 +423,80 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
       await autenticado(tokenAdmin, 'patch', `/refuelings/${refueling.body.id}`)
         .send({ mileage: 999999 })
         .expect(404);
+    });
+  });
+
+  // Chamada real à API do ViaCEP (viacep.com.br), sem mock — é o requisito
+  // crítico do Passo 27 (usar HttpService de verdade pra consumir API externa).
+  describe('ViaCEP: integração real (sem mock)', () => {
+    it('ViaCepService.buscarPorCep resolve um CEP válido de verdade', async () => {
+      const endereco = await servicoViaCep.buscarPorCep('01310-100');
+      expect(endereco.localidade).toEqual('São Paulo');
+      expect(endereco.uf).toEqual('SP');
+      expect(endereco.fullAddress).toEqual('São Paulo, SP');
+    });
+
+    it('CEP com máscara e sem máscara devolvem o mesmo resultado', async () => {
+      const comMascara = await servicoViaCep.buscarPorCep('20040-020');
+      const semMascara = await servicoViaCep.buscarPorCep('20040020');
+      expect(comMascara.localidade).toEqual(semMascara.localidade);
+      expect(comMascara.uf).toEqual(semMascara.uf);
+    });
+
+    it('CEP inexistente lança BadRequestException (400)', async () => {
+      await expect(servicoViaCep.buscarPorCep('00000-000')).rejects.toMatchObject({
+        status: 400,
+      });
+    });
+
+    it('CEP mal formatado falha rápido (400), sem nem chamar a API', async () => {
+      const inicio = Date.now();
+      await expect(servicoViaCep.buscarPorCep('ABC-DEFG')).rejects.toMatchObject({
+        status: 400,
+      });
+      await expect(servicoViaCep.buscarPorCep('123')).rejects.toMatchObject({
+        status: 400,
+      });
+      // Bem abaixo do timeout configurado (10s): confirma que não foi à rede.
+      expect(Date.now() - inicio).toBeLessThan(2000);
+    });
+
+    it('POST /trips com CEPs válidos grava o endereço resolvido, não o CEP cru', async () => {
+      const veiculo = await criarVeiculo();
+      const driver = await criarMotorista();
+
+      const trip = await autenticado(tokenAdmin, 'post', '/trips')
+        .send({
+          driverId: driver.id,
+          vehicleId: veiculo.id,
+          startKm: veiculo.currentMileage,
+          startLocation: '01310-100',
+          endLocation: '30130-010',
+        })
+        .expect(201);
+      idsDeTripParaLimpar.push(trip.body.id);
+
+      expect(trip.body.startLocation).toEqual('São Paulo, SP');
+      expect(trip.body.endLocation).toEqual('Belo Horizonte, MG');
+
+      const viagemNoBanco = await prisma.trip.findUnique({ where: { id: trip.body.id } });
+      expect(viagemNoBanco?.startLocation).toEqual('São Paulo, SP');
+      expect(viagemNoBanco?.endLocation).toEqual('Belo Horizonte, MG');
+    });
+
+    it('POST /trips com CEP inválido em startLocation dá 400', async () => {
+      const veiculo = await criarVeiculo();
+      const driver = await criarMotorista();
+
+      await autenticado(tokenAdmin, 'post', '/trips')
+        .send({
+          driverId: driver.id,
+          vehicleId: veiculo.id,
+          startKm: veiculo.currentMileage,
+          startLocation: '00000-000',
+          endLocation: '20040-020',
+        })
+        .expect(400);
     });
   });
 });
