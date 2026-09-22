@@ -1,0 +1,386 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  importFileExtension = ""
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum VehicleStatus {
+  AVAILABLE
+  IN_USE
+  IN_MAINTENANCE
+  OUT_OF_SERVICE
+}
+
+enum TripStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum FuelType {
+  DIESEL
+  GASOLINE
+  ETHANOL
+  HYBRID
+}
+
+enum MaintenanceType {
+  PREVENTIVE
+  CORRECTIVE
+  INSPECTION
+}
+
+enum MaintenanceStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum IncidentType {
+  ACCIDENT
+  MECHANICAL_FAILURE
+  OTHER
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum IncidentStatus {
+  REPORTED
+  UNDER_INVESTIGATION
+  RESOLVED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+// ============================================================
+// AUTENTICAÇÃO E PERMISSÕES
+// ============================================================
+
+model User {
+  id       String  @id @default(uuid()) @map("id_user") @db.Uuid
+  email    String  @unique @db.VarChar(255)
+  password String  @db.VarChar(255) // hash bcrypt (60 caracteres)
+  fullName String  @map("full_name") @db.VarChar(150)
+  roleId   String  @map("fk_role_id") @db.Uuid
+  role     Role    @relation(fields: [roleId], references: [id])
+  isActive Boolean @default(true) @map("is_active")
+
+  // apiKey guarda o hash SHA-256 (hex, 64 caracteres) da chave, nunca a chave em si
+  apiKey           String?   @unique @map("api_key") @db.VarChar(255)
+  apiKeyCreatedAt  DateTime? @map("api_key_created_at")
+  apiKeyLastUsedAt DateTime? @map("api_key_last_used_at")
+
+  // Relacionamentos
+  driver       Driver?
+  permissions  UserPermission[]
+  createdTrips Trip[]           @relation("createdBy")
+  refuelings   Refueling[]      @relation("registeredBy")
+  maintenances Maintenance[]    @relation("registeredBy")
+  incidents    Incident[]       @relation("registeredBy")
+  auditLogs    AuditLog[]       @relation("changedBy")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([roleId])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+model Role {
+  id          String  @id @default(uuid()) @map("id_role") @db.Uuid
+  name        String  @unique @db.VarChar(50) // DRIVER, FLEET_MANAGER, ADMIN
+  description String? @db.VarChar(255)
+
+  users       User[]
+  permissions RolePermission[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String  @id @default(uuid()) @map("id_permission") @db.Uuid
+  code        String  @unique @db.VarChar(100) // ex: TRIP_CREATE, DRIVER_VIEW_OWN
+  description String? @db.VarChar(255)
+
+  roles RolePermission[]
+  users UserPermission[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String @map("fk_role_id") @db.Uuid
+  permissionId String @map("fk_permission_id") @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+// Permissões extras dadas direto a um usuário
+model UserPermission {
+  userId       String @map("fk_user_id") @db.Uuid
+  permissionId String @map("fk_permission_id") @db.Uuid
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, permissionId])
+  @@index([permissionId])
+  @@map("user_permissions")
+}
+
+// ============================================================
+// FROTA
+// ============================================================
+
+model Driver {
+  id     String @id @default(uuid()) @map("id_driver") @db.Uuid
+  userId String @unique @map("fk_user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  licenseNumber String   @unique @map("license_number") @db.VarChar(20)
+  licenseExpiry DateTime @map("license_expiry") @db.Date
+  isActive      Boolean  @default(true) @map("is_active")
+
+  trips      Trip[]
+  refuelings Refueling[]
+  incidents  Incident[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([deletedAt])
+  @@map("drivers")
+}
+
+model Vehicle {
+  id    String @id @default(uuid()) @map("id_vehicle") @db.Uuid
+  plate String @unique @db.VarChar(8) // ex: ABC1D23 ou ABC-1234
+  model String @db.VarChar(100)
+  year  Int    @db.SmallInt
+
+  status            VehicleStatus @default(AVAILABLE)
+  currentMileage    Int           @map("current_mileage")
+  lastMaintenanceKm Int           @map("last_maintenance_km")
+
+  trips        Trip[]
+  refuelings   Refueling[]
+  maintenances Maintenance[]
+  incidents    Incident[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([status])
+  @@index([deletedAt])
+  @@map("vehicles")
+}
+
+model Trip {
+  id String @id @default(uuid()) @map("id_trip") @db.Uuid
+
+  driverId String @map("fk_driver_id") @db.Uuid
+  driver   Driver @relation(fields: [driverId], references: [id])
+
+  vehicleId String  @map("fk_vehicle_id") @db.Uuid
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id])
+
+  status TripStatus @default(PLANNED)
+
+  startKm Int  @map("start_km")
+  endKm   Int? @map("end_km") // vazio até a viagem terminar
+
+  startLocation String @map("start_location") @db.VarChar(255)
+  endLocation   String @map("end_location") @db.VarChar(255)
+
+  startTime DateTime  @default(now()) @map("start_time")
+  endTime   DateTime? @map("end_time") // vazio até a viagem terminar
+
+  createdBy     String @map("fk_user_id") @db.Uuid
+  createdByUser User   @relation("createdBy", fields: [createdBy], references: [id])
+
+  incidents Incident[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  // Motorista/veículo com 2 viagens ativas: regra fica nos triggers (passo 11).
+  // O Prisma não suporta índice único parcial (where) no schema.
+  @@index([driverId])
+  @@index([vehicleId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([createdBy])
+  @@index([vehicleId, status])
+  @@index([driverId, status])
+  @@index([deletedAt])
+  @@index([driverId, deletedAt])
+  @@index([vehicleId, deletedAt])
+  @@index([status, deletedAt])
+  @@map("trips")
+}
+
+model Refueling {
+  id String @id @default(uuid()) @map("id_refueling") @db.Uuid
+
+  vehicleId String  @map("fk_vehicle_id") @db.Uuid
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id])
+
+  driverId String @map("fk_driver_id") @db.Uuid
+  driver   Driver @relation(fields: [driverId], references: [id])
+
+  mileage      Int
+  litersAdded  Decimal @map("liters_added") @db.Decimal(10, 2)
+  costPerLiter Decimal @map("cost_per_liter") @db.Decimal(10, 4)
+  totalCost    Decimal @map("total_cost") @db.Decimal(12, 2)
+
+  fuelType FuelType @map("fuel_type")
+
+  registeredBy     String @map("fk_user_id") @db.Uuid
+  registeredByUser User   @relation("registeredBy", fields: [registeredBy], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([vehicleId])
+  @@index([driverId])
+  @@index([createdAt])
+  @@index([registeredBy])
+  @@index([deletedAt])
+  @@index([vehicleId, deletedAt])
+  @@index([driverId, deletedAt])
+  @@map("refuelings")
+}
+
+model Maintenance {
+  id String @id @default(uuid()) @map("id_maintenance") @db.Uuid
+
+  vehicleId String  @map("fk_vehicle_id") @db.Uuid
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id])
+
+  type   MaintenanceType
+  status MaintenanceStatus @default(SCHEDULED)
+
+  scheduledDate DateTime  @map("scheduled_date")
+  completedDate DateTime? @map("completed_date")
+  description   String    @db.VarChar(1000)
+  cost          Decimal   @db.Decimal(12, 2)
+
+  registeredBy     String @map("fk_user_id") @db.Uuid
+  registeredByUser User   @relation("registeredBy", fields: [registeredBy], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([vehicleId])
+  @@index([status])
+  @@index([registeredBy])
+  @@index([vehicleId, status])
+  @@index([deletedAt])
+  @@index([vehicleId, deletedAt])
+  @@map("maintenances")
+}
+
+model Incident {
+  id String @id @default(uuid()) @map("id_incident") @db.Uuid
+
+  tripId String? @map("fk_trip_id") @db.Uuid
+  trip   Trip?   @relation(fields: [tripId], references: [id])
+
+  vehicleId String  @map("fk_vehicle_id") @db.Uuid
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id])
+
+  driverId String @map("fk_driver_id") @db.Uuid
+  driver   Driver @relation(fields: [driverId], references: [id])
+
+  type     IncidentType
+  severity Severity       @default(LOW)
+  status   IncidentStatus @default(REPORTED)
+
+  description String @db.VarChar(1000)
+
+  photoUrl String? @map("photo_url") @db.VarChar(500) // URL da foto no S3/GCP
+  photoKey String? @map("photo_key") @db.VarChar(255) // chave da foto, para apagar depois
+
+  registeredBy     String @map("fk_user_id") @db.Uuid
+  registeredByUser User   @relation("registeredBy", fields: [registeredBy], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([vehicleId])
+  @@index([driverId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([tripId])
+  @@index([registeredBy])
+  @@index([deletedAt])
+  @@index([vehicleId, deletedAt])
+  @@index([driverId, deletedAt])
+  @@map("incidents")
+}
+
+// ============================================================
+// AUDITORIA (imutável: só cria, nunca altera)
+// ============================================================
+
+model AuditLog {
+  id String @id @default(uuid()) @map("id_audit_log") @db.Uuid
+
+  entityType String      @map("entity_type") @db.VarChar(50) // USER, TRIP, VEHICLE...
+  entityId   String      @map("entity_id") @db.Uuid
+  action     AuditAction
+
+  changedBy     String @map("fk_user_id") @db.Uuid
+  changedByUser User   @relation("changedBy", fields: [changedBy], references: [id])
+
+  oldValues Json? @map("old_values") @db.JsonB // vazio quando é CREATE
+  newValues Json? @map("new_values") @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([changedBy])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
