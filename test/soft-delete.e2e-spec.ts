@@ -324,6 +324,94 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
     });
   });
 
+  describe('Correções do QA: hard delete bloqueado por histórico de atividade (trips/audit_logs/etc)', () => {
+    it('DELETE /users/:id/permanent de usuário que criou uma trip dá 409, nada quebra', async () => {
+      const usuarioCriador = await autenticado('post', '/users')
+        .send({
+          email: novoEmail(),
+          password: SENHA,
+          fullName: 'Usuario E2E Historico Trip',
+          roleId: roleIdDriver,
+        })
+        .expect(201);
+      const idUsuarioCriador = usuarioCriador.body.id;
+      idsDeUsuarioParaLimpar.push(idUsuarioCriador);
+
+      const usuarioMotorista = await autenticado('post', '/users')
+        .send({
+          email: novoEmail(),
+          password: SENHA,
+          fullName: 'Motorista E2E Historico Trip',
+          roleId: roleIdDriver,
+        })
+        .expect(201);
+      const idUsuarioMotorista = usuarioMotorista.body.id;
+      idsDeUsuarioParaLimpar.push(idUsuarioMotorista);
+
+      const dataFutura = new Date();
+      dataFutura.setFullYear(dataFutura.getFullYear() + 1);
+      const driver = await autenticado('post', '/drivers')
+        .send({
+          userId: idUsuarioMotorista,
+          licenseNumber: `E2E${randomBytes(4).toString('hex')}`,
+          licenseExpiry: dataFutura.toISOString(),
+        })
+        .expect(201);
+
+      const veiculo = await prisma.vehicle.create({
+        data: {
+          plate: `E2E${randomBytes(3).toString('hex').toUpperCase().slice(0, 4)}`,
+          model: 'Fiat Strada',
+          year: 2022,
+          currentMileage: 1000,
+          lastMaintenanceKm: 0,
+        },
+      });
+
+      const trip = await prisma.trip.create({
+        data: {
+          driverId: driver.body.id,
+          vehicleId: veiculo.id,
+          status: 'PLANNED',
+          startKm: veiculo.currentMileage,
+          startLocation: 'Origem E2E',
+          endLocation: 'Destino E2E',
+          createdBy: idUsuarioCriador,
+        },
+      });
+
+      // Soft delete funciona normalmente; só o hard delete deve ficar bloqueado.
+      await autenticado('delete', `/users/${idUsuarioCriador}`).expect(204);
+
+      const resposta = await autenticado(
+        'delete',
+        `/users/${idUsuarioCriador}/permanent`,
+      ).expect(409);
+      expect(resposta.body.message).toContain('associated history');
+
+      const usuarioNoBanco = await prisma.user.findUnique({
+        where: { id: idUsuarioCriador },
+      });
+      expect(usuarioNoBanco).not.toBeNull();
+
+      // Limpeza dos registros auxiliares criados só para este teste (o resto
+      // do banco volta ao normal; audit_logs gerados ficam, são append-only).
+      await prisma.trip.delete({ where: { id: trip.id } });
+      await prisma.driver.delete({ where: { id: driver.body.id } });
+      await prisma.vehicle.delete({ where: { id: veiculo.id } });
+
+      // idUsuarioCriador tem um audit_log com fk_user_id apontando pra ele
+      // (trigger da trip usa createdBy quando não há sessão): fica permanentemente
+      // bloqueado pra hard delete, por design. Tira do array de limpeza forçada
+      // do afterAll (senão o deleteMany bruto quebraria na mesma FK) e deixa
+      // soft-deletado, igual ao residual esperado de audit_logs.
+      const posicao = idsDeUsuarioParaLimpar.indexOf(idUsuarioCriador);
+      if (posicao !== -1) {
+        idsDeUsuarioParaLimpar.splice(posicao, 1);
+      }
+    });
+  });
+
   describe('Papéis sem permissão', () => {
     it('GET /users sem token dá 401', async () => {
       await request(app.getHttpServer()).get('/users').expect(401);
