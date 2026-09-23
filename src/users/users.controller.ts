@@ -27,6 +27,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Permissions } from '../auth/decorators/permissions.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { UsuarioLogado } from '../auth/interfaces/usuario-logado.interface';
 import { NomePipe } from '../common/pipes/name-pipe';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
@@ -34,6 +36,8 @@ import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ReplaceUserDto } from './dto/replace-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateMeuPerfilDto } from './dto/update-meu-perfil.dto';
+import { TrocarSenhaDto } from './dto/trocar-senha.dto';
 import { UserRemovidoRespostaDto, UserRespostaDto } from './dto/user-response.dto';
 import { UsersService } from './users.service';
 
@@ -125,6 +129,80 @@ export class UsersController {
       paginacao.page,
       paginacao.pageSize,
     );
+  }
+
+  // Precisa vir antes de "GET /:id", senão "me" seria lido como um id.
+  @Get('me')
+  @Permissions('PROFILE_VIEW')
+  @ApiOperation({
+    summary: 'Busca o perfil do usuário logado',
+    description:
+      'Devolve os dados do próprio usuário autenticado (nunca senha/hash). Acesso: qualquer ' +
+      'papel com a permissão `PROFILE_VIEW` (todos por padrão: ADMIN, FLEET_MANAGER, DRIVER).\n\n' +
+      '`x-database-tables`: lê `users`.',
+    ...({ 'x-database-tables': { read: ['users'] } } as Record<string, unknown>),
+  })
+  @ApiResponse({ status: 200, description: 'Perfil do usuário logado.', type: UserRespostaDto })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Usuário autenticado não tem a permissão PROFILE_VIEW.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  buscarMeuPerfil(@CurrentUser() usuario: UsuarioLogado) {
+    return this.servicoUsers.buscarMeuPerfil(usuario.userId);
+  }
+
+  @Patch('me')
+  @Permissions('PROFILE_UPDATE_OWN')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Atualiza o próprio perfil (fullName)',
+    description:
+      'Atualiza o nome do próprio usuário autenticado. E-mail, senha, papel (`roleId`) e ' +
+      '`isActive` não entram aqui — isso é `PATCH /users/:id`, rota administrativa. Acesso: ' +
+      'qualquer papel com a permissão `PROFILE_UPDATE_OWN` (todos por padrão: ADMIN, ' +
+      'FLEET_MANAGER, DRIVER).\n\n' +
+      '`x-database-tables`: lê `users`; escreve em `users`.',
+    ...({
+      'x-database-tables': { read: ['users'], write: ['users'] },
+    } as Record<string, unknown>),
+  })
+  @ApiBody({ type: UpdateMeuPerfilDto })
+  @ApiResponse({ status: 200, description: 'Perfil atualizado.', type: UserRespostaDto })
+  @ApiResponse({ status: 400, description: 'Corpo inválido.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Usuário autenticado não tem a permissão PROFILE_UPDATE_OWN.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  atualizarMeuPerfil(
+    @CurrentUser() usuario: UsuarioLogado,
+    @Body() dados: UpdateMeuPerfilDto,
+    // fullName é opcional aqui; o NomePipe deixa passar quando não vem.
+    @Body('fullName', NomePipe) _fullName: string | undefined,
+  ) {
+    return this.servicoUsers.atualizarMeuPerfil(usuario.userId, dados);
+  }
+
+  @Patch('me/password')
+  @Permissions('PASSWORD_CHANGE_OWN')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Troca a própria senha',
+    description:
+      'Exige a senha atual correta antes de gravar a nova (mesmo hash bcrypt usado no resto do ' +
+      'projeto). Acesso: qualquer papel com a permissão `PASSWORD_CHANGE_OWN` (todos por padrão: ' +
+      'ADMIN, FLEET_MANAGER, DRIVER).\n\n' +
+      '`x-database-tables`: lê `users`; escreve em `users`.',
+    ...({
+      'x-database-tables': { read: ['users'], write: ['users'] },
+    } as Record<string, unknown>),
+  })
+  @ApiBody({ type: TrocarSenhaDto })
+  @ApiResponse({ status: 200, description: 'Senha trocada (sem corpo de dados sensíveis na resposta).' })
+  @ApiResponse({ status: 400, description: 'Corpo inválido (ex: senha nova fora do tamanho permitido).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente/inválido/expirado, ou `currentPassword` incorreta.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Usuário autenticado não tem a permissão PASSWORD_CHANGE_OWN.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  async trocarSenha(
+    @CurrentUser() usuario: UsuarioLogado,
+    @Body() dados: TrocarSenhaDto,
+  ): Promise<{ message: string }> {
+    await this.servicoUsers.trocarSenha(usuario.userId, dados);
+    return { message: 'Password changed' };
   }
 
   @Get(':id')

@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../database/prisma.service';
@@ -15,6 +16,8 @@ import {
 import { CreateUserDto } from './dto/create-user.dto';
 import { ReplaceUserDto } from './dto/replace-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateMeuPerfilDto } from './dto/update-meu-perfil.dto';
+import { TrocarSenhaDto } from './dto/trocar-senha.dto';
 
 // Custo do bcrypt (mesmo valor usado no cadastro público de /auth/signup).
 const CUSTO_BCRYPT = 10;
@@ -243,6 +246,49 @@ export class UsersService {
     }
 
     await this.servicoSoftDelete.removerPermanentemente('user', id);
+  }
+
+  // GET /users/me: mesmo formato seguro de buscarPorId, mas pelo id de quem
+  // está logado (não é um parâmetro de rota livre).
+  async buscarMeuPerfil(userId: string) {
+    return this.buscarPorId(userId);
+  }
+
+  // PATCH /users/me: só fullName. E-mail/senha/roleId/isActive não entram
+  // aqui (ver UpdateMeuPerfilDto).
+  async atualizarMeuPerfil(userId: string, dados: UpdateMeuPerfilDto) {
+    await this.buscarPorId(userId);
+
+    return this.servicoPrisma.user.update({
+      where: { id: userId },
+      data: { fullName: dados.fullName },
+      select: SELECAO_SEGURA,
+    });
+  }
+
+  // PATCH /users/me/password: exige a senha atual correta antes de trocar.
+  async trocarSenha(userId: string, dados: TrocarSenhaDto): Promise<void> {
+    const usuario = await this.servicoPrisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!usuario) {
+      throw new NotFoundException('User not found');
+    }
+
+    const senhaAtualCorreta = await bcrypt.compare(
+      dados.currentPassword,
+      usuario.password,
+    );
+    if (!senhaAtualCorreta) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const novoHash = await bcrypt.hash(dados.newPassword, CUSTO_BCRYPT);
+
+    await this.servicoPrisma.user.update({
+      where: { id: userId },
+      data: { password: novoHash },
+    });
   }
 
   private async validarRoleId(roleId: string): Promise<void> {

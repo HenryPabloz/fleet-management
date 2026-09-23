@@ -19,6 +19,7 @@ import { TripsModule } from './trips/trips.module';
 import { RefuelingsModule } from './refuelings/refuelings.module';
 import { IncidentsModule } from './incidents/incidents.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { HealthModule } from './health/health.module';
 
 @Module({
@@ -48,6 +49,7 @@ import { HealthModule } from './health/health.module';
     RefuelingsModule,
     IncidentsModule,
     AnalyticsModule,
+    AuditLogsModule,
     HealthModule,
   ],
   controllers: [AppController],
