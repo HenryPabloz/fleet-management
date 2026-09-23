@@ -23,13 +23,28 @@ export class SoftDeleteService {
     return (this.servicoPrisma as any)[nome];
   }
 
+  // Só User e Driver têm coluna isActive; nos outros models soft-delete não mexe nela.
+  private readonly MODELOS_COM_IS_ACTIVE: NomeDeModeloComSoftDelete[] = [
+    'user',
+    'driver',
+  ];
+
+  private temColunaIsActive(nome: NomeDeModeloComSoftDelete): boolean {
+    return this.MODELOS_COM_IS_ACTIVE.includes(nome);
+  }
+
   async removerLogicamente<T = unknown>(
     nome: NomeDeModeloComSoftDelete,
     id: string,
   ): Promise<T> {
+    const dados: Record<string, unknown> = { deletedAt: new Date() };
+    // Remover logicamente também revoga acesso: isActive vai junto para false.
+    if (this.temColunaIsActive(nome)) {
+      dados.isActive = false;
+    }
     return this.modelo(nome).update({
       where: { id },
-      data: { deletedAt: new Date() },
+      data: dados,
     });
   }
 
@@ -38,9 +53,14 @@ export class SoftDeleteService {
     id: string,
     selecao?: Record<string, boolean>,
   ): Promise<T> {
+    const dados: Record<string, unknown> = { deletedAt: null };
+    // Restaurar desfaz o que o soft delete fez: isActive volta para true.
+    if (this.temColunaIsActive(nome)) {
+      dados.isActive = true;
+    }
     const parametros: Record<string, unknown> = {
       where: { id },
-      data: { deletedAt: null },
+      data: dados,
     };
     // Select opcional: quem chama pode pedir uma seleção segura (sem password/apiKey, por exemplo).
     if (selecao) {

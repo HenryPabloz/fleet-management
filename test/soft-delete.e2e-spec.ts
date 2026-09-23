@@ -155,11 +155,13 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
       expect(idsNaLista).toContain(idUsuario);
     });
 
-    it('DELETE /users/:id faz soft delete (some da listagem, deletedAt preenchido)', async () => {
+    it('DELETE /users/:id faz soft delete (some da listagem, deletedAt preenchido, isActive vira false)', async () => {
       await autenticado('delete', `/users/${idUsuario}`).expect(204);
 
       const noBanco = await prisma.user.findUnique({ where: { id: idUsuario } });
       expect(noBanco?.deletedAt).not.toBeNull();
+      // isActive sincroniza com o soft delete: já vira false na hora, sem precisar de backfill.
+      expect(noBanco?.isActive).toBe(false);
 
       await autenticado('get', `/users/${idUsuario}`).expect(404);
 
@@ -180,11 +182,12 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
       expect(idsNaLista).toContain(idUsuario);
     });
 
-    it('PATCH /users/:id/restore volta a aparecer na listagem normal', async () => {
+    it('PATCH /users/:id/restore volta a aparecer na listagem normal e isActive volta a true', async () => {
       await autenticado('patch', `/users/${idUsuario}/restore`).expect(200);
 
       const noBanco = await prisma.user.findUnique({ where: { id: idUsuario } });
       expect(noBanco?.deletedAt).toBeNull();
+      expect(noBanco?.isActive).toBe(true);
 
       await autenticado('get', `/users/${idUsuario}`).expect(200);
     });
@@ -247,11 +250,12 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
       expect(idsNaLista).toContain(idDriver);
     });
 
-    it('DELETE /drivers/:id faz soft delete', async () => {
+    it('DELETE /drivers/:id faz soft delete e isActive vira false', async () => {
       await autenticado('delete', `/drivers/${idDriver}`).expect(204);
 
       const noBanco = await prisma.driver.findUnique({ where: { id: idDriver } });
       expect(noBanco?.deletedAt).not.toBeNull();
+      expect(noBanco?.isActive).toBe(false);
 
       const resposta = await autenticado('get', '/drivers?pageSize=100').expect(200);
       const idsNaLista = resposta.body.data.map((item: { id: string }) => item.id);
@@ -269,11 +273,12 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
       expect(idsNaLista).toContain(idDriver);
     });
 
-    it('PATCH /drivers/:id/restore volta a aparecer', async () => {
+    it('PATCH /drivers/:id/restore volta a aparecer e isActive volta a true', async () => {
       await autenticado('patch', `/drivers/${idDriver}/restore`).expect(200);
 
       const noBanco = await prisma.driver.findUnique({ where: { id: idDriver } });
       expect(noBanco?.deletedAt).toBeNull();
+      expect(noBanco?.isActive).toBe(true);
     });
 
     it('DELETE /drivers/:id/permanent apaga de vez', async () => {
@@ -448,6 +453,74 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
       if (posicao !== -1) {
         idsDeUsuarioParaLimpar.splice(posicao, 1);
       }
+    });
+  });
+
+  describe('Segurança: soft delete revoga autenticação (JWT e API key)', () => {
+    let email: string;
+    let apiKey: string;
+    let idUsuario: string;
+    let jwtAntigo: string;
+
+    beforeAll(async () => {
+      email = novoEmail();
+      const cadastro = await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({ email, password: SENHA, fullName: 'Usuario Teste Auth Revoke' })
+        .expect(201);
+      apiKey = cadastro.body.apiKey;
+      idUsuario = cadastro.body.userId;
+      idsDeUsuarioParaLimpar.push(idUsuario);
+
+      const login = await request(app.getHttpServer())
+        .post('/auth/login')
+        .set('x-api-key', apiKey)
+        .send({ email, password: SENHA })
+        .expect(200);
+      jwtAntigo = login.body.accessToken;
+    });
+
+    it('JWT e API key funcionam normalmente antes do soft delete', async () => {
+      await request(app.getHttpServer())
+        .get('/users/me')
+        .set('Authorization', `Bearer ${jwtAntigo}`)
+        .expect(200);
+    });
+
+    it('DELETE /users/:id soft-deleta (isActive já vira false) e o MESMO JWT antigo passa a dar 401', async () => {
+      await autenticado('delete', `/users/${idUsuario}`).expect(204);
+
+      const noBanco = await prisma.user.findUnique({ where: { id: idUsuario } });
+      expect(noBanco?.deletedAt).not.toBeNull();
+      expect(noBanco?.isActive).toBe(false);
+
+      // Mesmo token de antes do soft delete: agora tem que dar 401, não 200.
+      await request(app.getHttpServer())
+        .get('/users/me')
+        .set('Authorization', `Bearer ${jwtAntigo}`)
+        .expect(401);
+    });
+
+    it('a MESMA API key também passa a dar 401 em POST /auth/login', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .set('x-api-key', apiKey)
+        .send({ email, password: SENHA })
+        .expect(401);
+    });
+
+    it('PATCH /users/:id/restore devolve isActive true e o login com a mesma API key volta a funcionar', async () => {
+      await autenticado('patch', `/users/${idUsuario}/restore`).expect(200);
+
+      const noBanco = await prisma.user.findUnique({ where: { id: idUsuario } });
+      expect(noBanco?.deletedAt).toBeNull();
+      expect(noBanco?.isActive).toBe(true);
+
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .set('x-api-key', apiKey)
+        .send({ email, password: SENHA })
+        .expect(200);
     });
   });
 

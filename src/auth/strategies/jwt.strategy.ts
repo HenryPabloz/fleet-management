@@ -24,7 +24,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   // O que este método devolver vira o "request.user".
   async validate(carga: JwtPayload): Promise<UsuarioLogado> {
-    const usuario = await this.prisma.user.findUnique({
+    // comSoftDelete: usuário soft-deletado nunca é encontrado aqui, então
+    // o token dele para de funcionar mesmo antes de expirar.
+    const usuario = await this.prisma.comSoftDelete.user.findUnique({
       where: { id: carga.sub },
       select: { id: true, isActive: true, email: true, roleId: true },
     });

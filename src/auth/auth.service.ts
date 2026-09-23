@@ -101,7 +101,8 @@ export class AuthService {
     // O banco só guarda e-mail em minúsculas e sem espaços.
     const emailNormalizado = dadosLogin.email.trim().toLowerCase();
 
-    const usuario = await this.servicoPrisma.user.findUnique({
+    // comSoftDelete: usuário soft-deletado não consegue logar de novo.
+    const usuario = await this.servicoPrisma.comSoftDelete.user.findUnique({
       where: { email: emailNormalizado },
       include: { role: true },
     });
@@ -140,7 +141,8 @@ export class AuthService {
 
   // Troca um JWT ainda válido por um novo, com prazo renovado e a mesma carga.
   async refreshToken(usuarioLogado: UsuarioLogado): Promise<LoginResponseDto> {
-    const usuario = await this.servicoPrisma.user.findUnique({
+    // comSoftDelete: reforça que um usuário removido não renova token.
+    const usuario = await this.servicoPrisma.comSoftDelete.user.findUnique({
       where: { id: usuarioLogado.userId },
       include: { role: true },
     });
@@ -193,8 +195,9 @@ export class AuthService {
   }
 
   // Recebe o hash da chave; devolve o usuário (com papel) ou null.
+  // comSoftDelete: usuário soft-deletado nunca é encontrado, então a API key dele para de funcionar.
   async validateApiKey(hashDaChave: string) {
-    return this.servicoPrisma.user.findUnique({
+    return this.servicoPrisma.comSoftDelete.user.findUnique({
       where: { apiKey: hashDaChave },
       include: { role: true },
     });
