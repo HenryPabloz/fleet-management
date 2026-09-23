@@ -8,6 +8,7 @@ import {
   normalizarPaginacao,
   ResultadoPaginado,
 } from '../common/utils/paginacao.util';
+import { buscarDriverIdProprio } from '../common/utils/resolver-driver-proprio.util';
 import { CreateTripDto } from './dto/create-trip.dto';
 import { StartTripDto } from './dto/start-trip.dto';
 import { EndTripDto } from './dto/end-trip.dto';
@@ -20,21 +21,37 @@ export class TripsService {
     private servicoViaCep: ViaCepService,
   ) {}
 
+  // escopoDoUsuario: quem só tem TRIP_VIEW_OWN (não TRIP_VIEW_ALL) tem o
+  // driverId da query IGNORADO e forçado para o próprio motorista — motorista
+  // não escolhe ver viagem de outro. Sem Driver vinculado, devolve lista vazia.
   async listar(
     page?: number,
     pageSize?: number,
     status?: string,
     driverId?: string,
     vehicleId?: string,
+    escopoDoUsuario?: { userId: string; temPermissaoViewAll: boolean },
   ): Promise<ResultadoPaginado<unknown>> {
     const paginacao = normalizarPaginacao(page, pageSize);
+
+    let driverIdFiltro = driverId;
+    if (escopoDoUsuario && !escopoDoUsuario.temPermissaoViewAll) {
+      const driverIdProprio = await buscarDriverIdProprio(
+        this.servicoPrisma,
+        escopoDoUsuario.userId,
+      );
+      if (!driverIdProprio) {
+        return montarPaginacao([], 0, paginacao.page, paginacao.pageSize);
+      }
+      driverIdFiltro = driverIdProprio;
+    }
 
     const where: Record<string, unknown> = {};
     if (status) {
       where.status = status;
     }
-    if (driverId) {
-      where.driverId = driverId;
+    if (driverIdFiltro) {
+      where.driverId = driverIdFiltro;
     }
     if (vehicleId) {
       where.vehicleId = vehicleId;

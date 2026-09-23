@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../database/prisma.service';
+import { PermissionsService } from '../../permissions/permissions.service';
 import { CHAVE_PAPEIS, CHAVE_PERMISSOES } from '../constants/auth.constants';
 import { UsuarioLogado } from '../interfaces/usuario-logado.interface';
 
@@ -18,6 +19,7 @@ export class RolesGuard implements CanActivate {
   constructor(
     private refletor: Reflector,
     private servicoPrisma: PrismaService,
+    private servicoPermissions: PermissionsService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -68,21 +70,10 @@ export class RolesGuard implements CanActivate {
     if (permissoesExigidas && permissoesExigidas.length > 0) {
       // Uma permissão libera o acesso se vier do papel (role) OU tiver sido
       // concedida individualmente ao usuário (delegação granular).
-      const [permissoesDoPapel, permissoesDoUsuario] = await Promise.all([
-        this.servicoPrisma.rolePermission.findMany({
-          where: { roleId: usuario.roleId },
-          include: { permission: true },
-        }),
-        this.servicoPrisma.userPermission.findMany({
-          where: { userId: usuario.userId },
-          include: { permission: true },
-        }),
-      ]);
-
-      const codigosDePermissao = [
-        ...permissoesDoPapel.map((item) => item.permission.code),
-        ...permissoesDoUsuario.map((item) => item.permission.code),
-      ];
+      const codigosDePermissao = await this.servicoPermissions.obterCodigosEfetivos(
+        usuario.userId,
+        usuario.roleId,
+      );
       const temPermissao = permissoesExigidas.some((codigo) =>
         codigosDePermissao.includes(codigo),
       );

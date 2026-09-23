@@ -7,6 +7,7 @@ import {
   normalizarPaginacao,
   ResultadoPaginado,
 } from '../common/utils/paginacao.util';
+import { buscarDriverIdProprio } from '../common/utils/resolver-driver-proprio.util';
 import { CreateRefuelingDto } from './dto/create-refueling.dto';
 
 @Injectable()
@@ -16,20 +17,36 @@ export class RefuelingsService {
     private servicoSoftDelete: SoftDeleteService,
   ) {}
 
+  // escopoDoUsuario: quem só tem REFUELING_VIEW_OWN (não REFUELING_VIEW_ALL)
+  // tem o driverId da query IGNORADO e forçado para o próprio motorista.
+  // Sem Driver vinculado, devolve lista vazia.
   async listar(
     page?: number,
     pageSize?: number,
     vehicleId?: string,
     driverId?: string,
+    escopoDoUsuario?: { userId: string; temPermissaoViewAll: boolean },
   ): Promise<ResultadoPaginado<unknown>> {
     const paginacao = normalizarPaginacao(page, pageSize);
+
+    let driverIdFiltro = driverId;
+    if (escopoDoUsuario && !escopoDoUsuario.temPermissaoViewAll) {
+      const driverIdProprio = await buscarDriverIdProprio(
+        this.servicoPrisma,
+        escopoDoUsuario.userId,
+      );
+      if (!driverIdProprio) {
+        return montarPaginacao([], 0, paginacao.page, paginacao.pageSize);
+      }
+      driverIdFiltro = driverIdProprio;
+    }
 
     const where: Record<string, unknown> = {};
     if (vehicleId) {
       where.vehicleId = vehicleId;
     }
-    if (driverId) {
-      where.driverId = driverId;
+    if (driverIdFiltro) {
+      where.driverId = driverIdFiltro;
     }
 
     const [dados, total] = await Promise.all([

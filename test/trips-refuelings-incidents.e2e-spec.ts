@@ -426,6 +426,190 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
     });
   });
 
+  // BUG 1 corrigido: motorista com só TRIP_VIEW_OWN/REFUELING_VIEW_OWN/
+  // INCIDENT_VIEW_OWN (matriz padrão do seed) só pode ver os próprios
+  // registros em GET /trips, /refuelings e /incidents — o driverId da query
+  // é ignorado (forçado para o próprio) quando o usuário não tem a versão ALL.
+  describe('BUG 1: motorista só vê os próprios registros (OWN de verdade)', () => {
+    function logarComoDriver(driver: { userId: string }) {
+      return servicoJwt.sign({
+        sub: driver.userId,
+        email: 'driver-own-test@test.local',
+        roleId: roleIdDriver,
+      });
+    }
+
+    it('GET /trips: driver A não vê a trip do driver B (com ou sem filtro), ADMIN vê as duas', async () => {
+      const veiculoA = await criarVeiculo();
+      const veiculoB = await criarVeiculo();
+      const driverA = await criarMotorista();
+      const driverB = await criarMotorista();
+      const tokenA = logarComoDriver(driverA);
+
+      const tripA = await autenticado(tokenAdmin, 'post', '/trips')
+        .send({
+          driverId: driverA.id,
+          vehicleId: veiculoA.id,
+          startKm: veiculoA.currentMileage,
+          startLocation: '01310-100',
+          endLocation: '20040-020',
+        })
+        .expect(201);
+      idsDeTripParaLimpar.push(tripA.body.id);
+
+      const tripB = await autenticado(tokenAdmin, 'post', '/trips')
+        .send({
+          driverId: driverB.id,
+          vehicleId: veiculoB.id,
+          startKm: veiculoB.currentMileage,
+          startLocation: '20040-020',
+          endLocation: '01310-100',
+        })
+        .expect(201);
+      idsDeTripParaLimpar.push(tripB.body.id);
+
+      const listaSemFiltro = await autenticado(tokenA, 'get', '/trips').expect(200);
+      const idsSemFiltro = listaSemFiltro.body.data.map((item: { id: string }) => item.id);
+      expect(idsSemFiltro).toContain(tripA.body.id);
+      expect(idsSemFiltro).not.toContain(tripB.body.id);
+
+      // driverId da query aponta pro OUTRO motorista: é ignorado, continua só a dele.
+      const listaComFiltroAlheio = await autenticado(
+        tokenA,
+        'get',
+        `/trips?driverId=${driverB.id}`,
+      ).expect(200);
+      const idsComFiltroAlheio = listaComFiltroAlheio.body.data.map(
+        (item: { id: string }) => item.id,
+      );
+      expect(idsComFiltroAlheio).toContain(tripA.body.id);
+      expect(idsComFiltroAlheio).not.toContain(tripB.body.id);
+
+      const listaAdmin = await autenticado(tokenAdmin, 'get', '/trips').expect(200);
+      const idsAdmin = listaAdmin.body.data.map((item: { id: string }) => item.id);
+      expect(idsAdmin).toEqual(
+        expect.arrayContaining([tripA.body.id, tripB.body.id]),
+      );
+    });
+
+    it('GET /refuelings: driver A não vê o abastecimento do driver B, ADMIN vê os dois', async () => {
+      const veiculoA = await criarVeiculo();
+      const veiculoB = await criarVeiculo();
+      const driverA = await criarMotorista();
+      const driverB = await criarMotorista();
+      const tokenA = logarComoDriver(driverA);
+
+      const refuelingA = await autenticado(tokenAdmin, 'post', '/refuelings')
+        .send({
+          vehicleId: veiculoA.id,
+          driverId: driverA.id,
+          mileage: veiculoA.currentMileage + 50,
+          litersAdded: 20,
+          costPerLiter: 5,
+          fuelType: 'DIESEL',
+        })
+        .expect(201);
+      idsDeRefuelingParaLimpar.push(refuelingA.body.id);
+
+      const refuelingB = await autenticado(tokenAdmin, 'post', '/refuelings')
+        .send({
+          vehicleId: veiculoB.id,
+          driverId: driverB.id,
+          mileage: veiculoB.currentMileage + 50,
+          litersAdded: 25,
+          costPerLiter: 5.5,
+          fuelType: 'GASOLINE',
+        })
+        .expect(201);
+      idsDeRefuelingParaLimpar.push(refuelingB.body.id);
+
+      const listaA = await autenticado(tokenA, 'get', '/refuelings').expect(200);
+      const idsA = listaA.body.data.map((item: { id: string }) => item.id);
+      expect(idsA).toContain(refuelingA.body.id);
+      expect(idsA).not.toContain(refuelingB.body.id);
+
+      const listaAFiltroAlheio = await autenticado(
+        tokenA,
+        'get',
+        `/refuelings?driverId=${driverB.id}`,
+      ).expect(200);
+      const idsAFiltroAlheio = listaAFiltroAlheio.body.data.map(
+        (item: { id: string }) => item.id,
+      );
+      expect(idsAFiltroAlheio).not.toContain(refuelingB.body.id);
+
+      const listaAdmin = await autenticado(tokenAdmin, 'get', '/refuelings').expect(200);
+      const idsAdmin = listaAdmin.body.data.map((item: { id: string }) => item.id);
+      expect(idsAdmin).toEqual(
+        expect.arrayContaining([refuelingA.body.id, refuelingB.body.id]),
+      );
+    });
+
+    it('GET /incidents: driver A não vê o incidente do driver B, ADMIN vê os dois (com filtro driverId)', async () => {
+      const veiculoA = await criarVeiculo();
+      const veiculoB = await criarVeiculo();
+      const driverA = await criarMotorista();
+      const driverB = await criarMotorista();
+      const tokenA = logarComoDriver(driverA);
+
+      const incidentA = await autenticado(tokenAdmin, 'post', '/incidents')
+        .field('vehicleId', veiculoA.id)
+        .field('driverId', driverA.id)
+        .field('type', 'OTHER')
+        .field('severity', 'LOW')
+        .field('description', 'Incidente do driver A (teste OWN)')
+        .expect(201);
+      idsDeIncidentParaLimpar.push(incidentA.body.id);
+
+      const incidentB = await autenticado(tokenAdmin, 'post', '/incidents')
+        .field('vehicleId', veiculoB.id)
+        .field('driverId', driverB.id)
+        .field('type', 'OTHER')
+        .field('severity', 'LOW')
+        .field('description', 'Incidente do driver B (teste OWN)')
+        .expect(201);
+      idsDeIncidentParaLimpar.push(incidentB.body.id);
+
+      const listaA = await autenticado(tokenA, 'get', '/incidents').expect(200);
+      const idsA = listaA.body.data.map((item: { id: string }) => item.id);
+      expect(idsA).toContain(incidentA.body.id);
+      expect(idsA).not.toContain(incidentB.body.id);
+
+      // ADMIN com filtro driverId=driverB só traz o incidente do B (novo filtro do BUG 1).
+      const listaAdminFiltrada = await autenticado(
+        tokenAdmin,
+        'get',
+        `/incidents?driverId=${driverB.id}`,
+      ).expect(200);
+      const idsAdminFiltrada = listaAdminFiltrada.body.data.map(
+        (item: { id: string }) => item.id,
+      );
+      expect(idsAdminFiltrada).toContain(incidentB.body.id);
+      expect(idsAdminFiltrada).not.toContain(incidentA.body.id);
+    });
+
+    it('driver com papel DRIVER mas sem Driver vinculado recebe lista vazia (não erro)', async () => {
+      const usuarioSemDriver = await autenticado(tokenAdmin, 'post', '/users')
+        .send({
+          email: novoEmail(),
+          password: SENHA,
+          fullName: 'Usuario Sem Driver Vinculado',
+          roleId: roleIdDriver,
+        })
+        .expect(201);
+      idsDeUsuarioParaLimpar.push(usuarioSemDriver.body.id);
+      const token = servicoJwt.sign({
+        sub: usuarioSemDriver.body.id,
+        email: usuarioSemDriver.body.email,
+        roleId: roleIdDriver,
+      });
+
+      const resposta = await autenticado(token, 'get', '/trips').expect(200);
+      expect(resposta.body.data).toEqual([]);
+      expect(resposta.body.pagination.total).toEqual(0);
+    });
+  });
+
   // Chamada real à API do ViaCEP (viacep.com.br), sem mock — é o requisito
   // crítico do Passo 27 (usar HttpService de verdade pra consumir API externa).
   describe('ViaCEP: integração real (sem mock)', () => {

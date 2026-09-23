@@ -17,6 +17,28 @@ export class PermissionsService {
     });
   }
 
+  // Junta os códigos de permissão efetivos do usuário (papel + delegação
+  // individual), num array só. Usado pela RolesGuard (autorização de rota) e
+  // pelos controllers que precisam saber se o usuário tem a versão "ALL" ou
+  // só a "OWN" de uma permissão (ex: TRIP_VIEW_ALL vs TRIP_VIEW_OWN).
+  async obterCodigosEfetivos(usuarioId: string, roleId: string): Promise<string[]> {
+    const [permissoesDoPapel, permissoesIndividuais] = await Promise.all([
+      this.servicoPrisma.rolePermission.findMany({
+        where: { roleId },
+        include: { permission: true },
+      }),
+      this.servicoPrisma.userPermission.findMany({
+        where: { userId: usuarioId },
+        include: { permission: true },
+      }),
+    ]);
+
+    return [
+      ...permissoesDoPapel.map((item) => item.permission.code),
+      ...permissoesIndividuais.map((item) => item.permission.code),
+    ];
+  }
+
   // Combina as permissões herdadas do papel com as concedidas individualmente ao usuário.
   async listarPermissoesDoUsuario(usuarioId: string) {
     const usuario = await this.servicoUsers.buscarPorId(usuarioId);

@@ -28,6 +28,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UsuarioLogado } from '../auth/interfaces/usuario-logado.interface';
+import { PermissionsService } from '../permissions/permissions.service';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
 import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
@@ -81,7 +82,10 @@ const REFUELING_SCHEMA = {
 @Controller('refuelings')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class RefuelingsController {
-  constructor(private servicoRefuelings: RefuelingsService) {}
+  constructor(
+    private servicoRefuelings: RefuelingsService,
+    private servicoPermissions: PermissionsService,
+  ) {}
 
   @Get()
   @Permissions('REFUELING_VIEW_OWN', 'REFUELING_VIEW_ALL')
@@ -89,14 +93,17 @@ export class RefuelingsController {
     summary: 'Lista abastecimentos (paginado)',
     description:
       'Lista abastecimentos ativos (não removidos), paginado, com filtros opcionais por veículo ' +
-      'e motorista. Acesso: ADMIN, FLEET_MANAGER, DRIVER.\n\n' +
+      'e motorista. Acesso: ADMIN, FLEET_MANAGER (REFUELING_VIEW_ALL, veem tudo, filtro ' +
+      '`driverId` livre), DRIVER (REFUELING_VIEW_OWN, só os próprios — o `driverId` da query é ' +
+      'ignorado e forçado para o motorista vinculado ao usuário logado; sem Driver vinculado ' +
+      'devolve lista vazia).\n\n' +
       '`x-database-tables`: lê `refuelings`.',
     ...({ 'x-database-tables': { read: ['refuelings'] } } as Record<string, unknown>),
   })
   @ApiQuery(QUERY_PAGE)
   @ApiQuery(QUERY_PAGE_SIZE)
   @ApiQuery({ name: 'vehicleId', required: false, type: String, format: 'uuid', description: 'Filtra por veículo.' })
-  @ApiQuery({ name: 'driverId', required: false, type: String, format: 'uuid', description: 'Filtra por motorista.' })
+  @ApiQuery({ name: 'driverId', required: false, type: String, format: 'uuid', description: 'Filtra por motorista. Ignorado se o usuário só tiver REFUELING_VIEW_OWN.' })
   @ApiResponse({
     status: 200,
     description: 'Página de abastecimentos.',
@@ -110,12 +117,22 @@ export class RefuelingsController {
   @ApiResponse({ status: 400, description: 'Filtro `vehicleId`/`driverId` fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  listar(@Query() query: ListRefuelingQueryDto) {
+  async listar(
+    @Query() query: ListRefuelingQueryDto,
+    @CurrentUser() usuario: UsuarioLogado,
+  ) {
+    const codigos = await this.servicoPermissions.obterCodigosEfetivos(
+      usuario.userId,
+      usuario.roleId,
+    );
+    const temPermissaoViewAll = codigos.includes('REFUELING_VIEW_ALL');
+
     return this.servicoRefuelings.listar(
       query.page,
       query.pageSize,
       query.vehicleId,
       query.driverId,
+      { userId: usuario.userId, temPermissaoViewAll },
     );
   }
 

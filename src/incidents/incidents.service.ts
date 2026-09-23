@@ -10,6 +10,7 @@ import {
   normalizarPaginacao,
   ResultadoPaginado,
 } from '../common/utils/paginacao.util';
+import { buscarDriverIdProprio } from '../common/utils/resolver-driver-proprio.util';
 import { PASTA_UPLOADS_INCIDENTS } from './utils/upload-incidents.config';
 import { CreateIncidentDto } from './dto/create-incident.dto';
 import { UpdateIncidentStatusDto } from './dto/update-incident-status.dto';
@@ -24,14 +25,31 @@ export class IncidentsService {
     private servicoSoftDelete: SoftDeleteService,
   ) {}
 
+  // escopoDoUsuario: quem só tem INCIDENT_VIEW_OWN (não INCIDENT_VIEW_ALL)
+  // tem o driverId da query IGNORADO e forçado para o próprio motorista.
+  // Sem Driver vinculado, devolve lista vazia.
   async listar(
     page?: number,
     pageSize?: number,
     severity?: string,
     status?: string,
     vehicleId?: string,
+    driverId?: string,
+    escopoDoUsuario?: { userId: string; temPermissaoViewAll: boolean },
   ): Promise<ResultadoPaginado<unknown>> {
     const paginacao = normalizarPaginacao(page, pageSize);
+
+    let driverIdFiltro = driverId;
+    if (escopoDoUsuario && !escopoDoUsuario.temPermissaoViewAll) {
+      const driverIdProprio = await buscarDriverIdProprio(
+        this.servicoPrisma,
+        escopoDoUsuario.userId,
+      );
+      if (!driverIdProprio) {
+        return montarPaginacao([], 0, paginacao.page, paginacao.pageSize);
+      }
+      driverIdFiltro = driverIdProprio;
+    }
 
     const where: Record<string, unknown> = {};
     if (severity) {
@@ -42,6 +60,9 @@ export class IncidentsService {
     }
     if (vehicleId) {
       where.vehicleId = vehicleId;
+    }
+    if (driverIdFiltro) {
+      where.driverId = driverIdFiltro;
     }
 
     const [dados, total] = await Promise.all([

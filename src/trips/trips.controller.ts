@@ -28,6 +28,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UsuarioLogado } from '../auth/interfaces/usuario-logado.interface';
+import { PermissionsService } from '../permissions/permissions.service';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
 import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
@@ -97,9 +98,10 @@ const ERROS_DE_PROCEDURE_COMUNS =
 // rotas de negócio (start/end/cancel), que chamam as procedures do banco.
 // Editar km/local direto quebraria a garantia de consistência das procedures.
 //
-// Leitura: quem tiver TRIP_VIEW_OWN ou TRIP_VIEW_ALL (o motorista vê todas as
-// viagens por enquanto, não só as próprias; filtrar "só as próprias" fica como
-// melhoria futura, documentada no relatório). Criação: TRIP_CREATE. Cancelamento:
+// Leitura: quem tiver TRIP_VIEW_OWN ou TRIP_VIEW_ALL. Sem TRIP_VIEW_ALL, o
+// filtro driverId da query é ignorado e forçado para o motorista logado (ver
+// resolver-driver-proprio.util.ts) — motorista só enxerga as próprias viagens.
+// Criação: TRIP_CREATE. Cancelamento:
 // TRIP_CANCEL_OWN. Start/end não têm código de permission no seed, continuam
 // em @Roles. DELETE/restore/permanent: só ADMIN (remoção de dados é decisão
 // administrativa; sem código de permission pra isso).
@@ -109,7 +111,10 @@ const ERROS_DE_PROCEDURE_COMUNS =
 @Controller('trips')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class TripsController {
-  constructor(private servicoTrips: TripsService) {}
+  constructor(
+    private servicoTrips: TripsService,
+    private servicoPermissions: PermissionsService,
+  ) {}
 
   @Get()
   @Permissions('TRIP_VIEW_OWN', 'TRIP_VIEW_ALL')
@@ -117,15 +122,17 @@ export class TripsController {
     summary: 'Lista viagens (paginado)',
     description:
       'Lista viagens ativas (não removidas), paginado, com filtros opcionais por status, ' +
-      'motorista e veículo. Acesso: ADMIN, FLEET_MANAGER, DRIVER (o motorista vê todas as ' +
-      'viagens por enquanto, não só as próprias).\n\n' +
+      'motorista e veículo. Acesso: ADMIN, FLEET_MANAGER (TRIP_VIEW_ALL, veem tudo, filtro ' +
+      '`driverId` livre), DRIVER (TRIP_VIEW_OWN, só as próprias viagens — o `driverId` da query ' +
+      'é ignorado e forçado para o motorista vinculado ao usuário logado; sem Driver vinculado ' +
+      'devolve lista vazia).\n\n' +
       '`x-database-tables`: lê `trips`.',
     ...({ 'x-database-tables': { read: ['trips'] } } as Record<string, unknown>),
   })
   @ApiQuery(QUERY_PAGE)
   @ApiQuery(QUERY_PAGE_SIZE)
   @ApiQuery({ name: 'status', required: false, enum: ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'], description: 'Filtra por status da viagem.' })
-  @ApiQuery({ name: 'driverId', required: false, type: String, format: 'uuid', description: 'Filtra por motorista.' })
+  @ApiQuery({ name: 'driverId', required: false, type: String, format: 'uuid', description: 'Filtra por motorista. Ignorado se o usuário só tiver TRIP_VIEW_OWN.' })
   @ApiQuery({ name: 'vehicleId', required: false, type: String, format: 'uuid', description: 'Filtra por veículo.' })
   @ApiResponse({
     status: 200,
@@ -140,13 +147,23 @@ export class TripsController {
   @ApiResponse({ status: 400, description: 'Filtro `driverId`/`vehicleId` fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  listar(@Query() query: ListTripQueryDto) {
+  async listar(
+    @Query() query: ListTripQueryDto,
+    @CurrentUser() usuario: UsuarioLogado,
+  ) {
+    const codigos = await this.servicoPermissions.obterCodigosEfetivos(
+      usuario.userId,
+      usuario.roleId,
+    );
+    const temPermissaoViewAll = codigos.includes('TRIP_VIEW_ALL');
+
     return this.servicoTrips.listar(
       query.page,
       query.pageSize,
       query.status,
       query.driverId,
       query.vehicleId,
+      { userId: usuario.userId, temPermissaoViewAll },
     );
   }
 
