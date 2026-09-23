@@ -233,31 +233,63 @@ export class MaintenancesService {
         data: { lastMaintenanceKm: veiculo.currentMileage },
       });
 
-      const outraManutencaoAtiva =
-        await this.servicoPrisma.comSoftDelete.maintenance.findFirst({
-          where: {
-            vehicleId,
-            status: { in: STATUS_ATIVOS },
-            id: { not: idDaManutencaoConcluida },
-          },
-        });
-
-      if (!outraManutencaoAtiva && veiculo.status === 'IN_MAINTENANCE') {
-        await this.servicoPrisma.vehicle.update({
-          where: { id: vehicleId },
-          data: { status: 'AVAILABLE' },
-        });
-      }
+      await this.liberarVeiculoSeSemManutencaoAtiva(
+        vehicleId,
+        idDaManutencaoConcluida,
+      );
     } catch (erro) {
       traduzirErroDeEscritaVeiculo(erro);
     }
   }
 
+  // Compartilhado entre a conclusão (status COMPLETED) e a remoção (soft
+  // delete) de uma manutenção: nos dois casos, se não sobrar nenhuma outra
+  // manutenção ativa pro veículo e ele ainda estiver IN_MAINTENANCE, volta pra
+  // AVAILABLE. idDaManutencaoParaExcluir é a manutenção que acabou de sair do
+  // estado ativo (concluída ou removida) — não conta como "outra ativa".
+  private async liberarVeiculoSeSemManutencaoAtiva(
+    vehicleId: string,
+    idDaManutencaoParaExcluir: string,
+  ): Promise<void> {
+    const veiculo = await this.servicoPrisma.comSoftDelete.vehicle.findUnique(
+      { where: { id: vehicleId } },
+    );
+    if (!veiculo || veiculo.status !== 'IN_MAINTENANCE') {
+      return;
+    }
+
+    const outraManutencaoAtiva =
+      await this.servicoPrisma.comSoftDelete.maintenance.findFirst({
+        where: {
+          vehicleId,
+          status: { in: STATUS_ATIVOS },
+          id: { not: idDaManutencaoParaExcluir },
+        },
+      });
+
+    if (!outraManutencaoAtiva) {
+      await this.servicoPrisma.vehicle.update({
+        where: { id: vehicleId },
+        data: { status: 'AVAILABLE' },
+      });
+    }
+  }
+
   async remover(id: string): Promise<void> {
-    await this.buscarPorId(id);
-    // Não reverte o status do veículo aqui de propósito: só a conclusão da
-    // manutenção (status COMPLETED) sincroniza o veículo de volta.
+    const manutencao = await this.buscarPorId(id);
+
     await this.servicoSoftDelete.removerLogicamente('maintenance', id);
+
+    // Se a manutenção removida estava ativa (SCHEDULED/IN_PROGRESS) e era a
+    // única do veículo, ele não pode ficar preso em IN_MAINTENANCE para
+    // sempre — reverte pra AVAILABLE, igual à conclusão.
+    if (STATUS_ATIVOS.includes(manutencao.status)) {
+      try {
+        await this.liberarVeiculoSeSemManutencaoAtiva(manutencao.vehicleId, id);
+      } catch (erro) {
+        traduzirErroDeEscritaVeiculo(erro);
+      }
+    }
   }
 
   async restaurar(id: string) {

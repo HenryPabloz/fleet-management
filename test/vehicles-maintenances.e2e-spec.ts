@@ -453,6 +453,65 @@ describe('Vehicles e Maintenances (e2e)', () => {
       const veiculoLiberado = await prisma.vehicle.findUnique({ where: { id: veiculo.id } });
       expect(veiculoLiberado?.status).toEqual('AVAILABLE');
     });
+
+    // BUG 2 corrigido: soft delete de uma manutenção ativa (SCHEDULED/IN_PROGRESS)
+    // agora reverte o veículo pra AVAILABLE quando não sobra outra manutenção
+    // ativa — antes ficava preso em IN_MAINTENANCE para sempre.
+    it('DELETE /maintenances/:id (soft delete) de uma manutenção ativa devolve o veículo para AVAILABLE', async () => {
+      const veiculo = await criarVeiculo();
+
+      const manutencao = await autenticado(tokenAdmin, 'post', '/maintenances')
+        .send({
+          vehicleId: veiculo.id,
+          type: 'PREVENTIVE',
+          scheduledDate: new Date().toISOString(),
+          description: 'Manutenção que vai ser removida antes de concluir',
+          cost: 180,
+        })
+        .expect(201);
+
+      let veiculoNoBanco = await prisma.vehicle.findUnique({ where: { id: veiculo.id } });
+      expect(veiculoNoBanco?.status).toEqual('IN_MAINTENANCE');
+
+      await autenticado(tokenAdmin, 'delete', `/maintenances/${manutencao.body.id}`).expect(204);
+
+      veiculoNoBanco = await prisma.vehicle.findUnique({ where: { id: veiculo.id } });
+      expect(veiculoNoBanco?.status).toEqual('AVAILABLE');
+    });
+
+    it('DELETE /maintenances/:id só libera o veículo quando não sobra outra manutenção ativa', async () => {
+      const veiculo = await criarVeiculo();
+
+      const primeira = await autenticado(tokenAdmin, 'post', '/maintenances')
+        .send({
+          vehicleId: veiculo.id,
+          type: 'PREVENTIVE',
+          scheduledDate: new Date().toISOString(),
+          description: 'Primeira manutenção ativa (BUG 2)',
+          cost: 100,
+        })
+        .expect(201);
+
+      const segunda = await autenticado(tokenAdmin, 'post', '/maintenances')
+        .send({
+          vehicleId: veiculo.id,
+          type: 'INSPECTION',
+          scheduledDate: new Date().toISOString(),
+          description: 'Segunda manutenção ativa (BUG 2)',
+          cost: 90,
+        })
+        .expect(201);
+
+      // Remove só a primeira: a segunda ainda está ativa, veículo continua preso.
+      await autenticado(tokenAdmin, 'delete', `/maintenances/${primeira.body.id}`).expect(204);
+      let veiculoNoBanco = await prisma.vehicle.findUnique({ where: { id: veiculo.id } });
+      expect(veiculoNoBanco?.status).toEqual('IN_MAINTENANCE');
+
+      // Remove a segunda também: agora sim libera.
+      await autenticado(tokenAdmin, 'delete', `/maintenances/${segunda.body.id}`).expect(204);
+      veiculoNoBanco = await prisma.vehicle.findUnique({ where: { id: veiculo.id } });
+      expect(veiculoNoBanco?.status).toEqual('AVAILABLE');
+    });
   });
 
   describe('Maintenances: completar com scheduledDate futura', () => {
