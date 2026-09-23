@@ -177,7 +177,7 @@ npm test
 npm run test:e2e
 ```
 
-No estado atual do repositório: `npm test` roda **1 suíte / 1 teste** (o teste unitário de `AppController`), e `npm run test:e2e` roda **7 suítes / 124 testes** (`analytics`, `app`, `auth-api-key`, `permissions-delegation`, `soft-delete`, `trips-refuelings-incidents`, `vehicles-maintenances`), cobrindo os fluxos de auth, RBAC, delegação granular de permissão (`UserPermission`), CRUD dos 7 recursos principais, soft delete, procedures/triggers e integração com ViaCEP.
+No estado atual do repositório: `npm test` roda **1 suíte / 1 teste** (o teste unitário de `AppController`), e `npm run test:e2e` roda **8 suítes / 144 testes** (`analytics`, `app`, `auth-api-key`, `permissions-delegation`, `soft-delete`, `trips-refuelings-incidents`, `users-me-audit-logs`, `vehicles-maintenances`), cobrindo os fluxos de auth, RBAC, delegação granular de permissão (`UserPermission`), CRUD dos 7 recursos principais, soft delete, procedures/triggers, integração com ViaCEP, perfil próprio (`/users/me`) e auditoria (`/audit-logs`).
 
 ## Estrutura do projeto
 
@@ -239,6 +239,9 @@ Autenticação: **pública** (sem guard), **API key** (header `x-api-key`) ou **
 |---|---|---|
 | GET | `/users` | ADMIN, FLEET_MANAGER |
 | GET | `/users/deleted/all` | ADMIN |
+| GET | `/users/me` | ADMIN, FLEET_MANAGER, DRIVER (permissão `PROFILE_VIEW`) |
+| PATCH | `/users/me` | ADMIN, FLEET_MANAGER, DRIVER (permissão `PROFILE_UPDATE_OWN`) |
+| PATCH | `/users/me/password` | ADMIN, FLEET_MANAGER, DRIVER (permissão `PASSWORD_CHANGE_OWN`) |
 | GET | `/users/:id` | ADMIN, FLEET_MANAGER |
 | POST | `/users` | ADMIN |
 | PATCH | `/users/:id` | ADMIN |
@@ -352,7 +355,15 @@ Gestão da delegação granular de permissões (tabela `user_permissions`). Toda
 | POST | `/users/:id/permissions` | ADMIN |
 | DELETE | `/users/:id/permissions/:code` | ADMIN |
 
-**Total: 74 rotas de negócio** nos 10 controllers acima (o `GET /` da raiz é só o placeholder padrão do `nest new`, e o `GET /health` é infraestrutura — nenhum dos dois faz parte da API de negócio). Nas tabelas acima, "Papéis" lista quem tem acesso **por papel** (`@Roles(...)`, fixo) ou **por permissão** (`@Permissions(...)`, que também aceita delegação granular via `UserPermission` — ver seção 5 de `projectDocs/projeto-fleet-management.md` para o detalhe de qual mecanismo cada rota usa).
+### Audit logs (`/audit-logs`)
+
+Só leitura: `audit_logs` é append-only (trigger do banco bloqueia `UPDATE`/`DELETE` na tabela), não existe rota de escrita.
+
+| Método | Rota | Papéis |
+|---|---|---|
+| GET | `/audit-logs` | ADMIN (permissão `AUDIT_VIEW`, por papel); outros papéis só via delegação granular (`UserPermission`). Filtros opcionais `entityType`/`entityId`. |
+
+**Total: 78 rotas de negócio** nos 11 controllers acima (o `GET /` da raiz é só o placeholder padrão do `nest new`, e o `GET /health` é infraestrutura — nenhum dos dois faz parte da API de negócio). Nas tabelas acima, "Papéis" lista quem tem acesso **por papel** (`@Roles(...)`, fixo) ou **por permissão** (`@Permissions(...)`, que também aceita delegação granular via `UserPermission` — ver seção 5 de `projectDocs/projeto-fleet-management.md` para o detalhe de qual mecanismo cada rota usa).
 
 ## Exemplos de uso (curl)
 
