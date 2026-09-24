@@ -24,10 +24,12 @@ export class SoftDeleteService {
     return (this.servicoPrisma as any)[nome];
   }
 
-  // Só User e Driver têm coluna isActive; nos outros models soft-delete não mexe nela.
+  // Só estes models têm coluna isActive; nos outros o soft delete não mexe nela.
   private readonly MODELOS_COM_IS_ACTIVE: NomeDeModeloComSoftDelete[] = [
     'user',
     'driver',
+    'vehicle',
+    'maintenance',
   ];
 
   private temColunaIsActive(nome: NomeDeModeloComSoftDelete): boolean {

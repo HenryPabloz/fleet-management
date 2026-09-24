@@ -11,31 +11,42 @@ const permissoes = [
   { code: 'TRIP_VIEW_OWN', description: 'View own trips' },
   { code: 'TRIP_VIEW_ALL', description: 'View all trips' },
   { code: 'TRIP_CANCEL_OWN', description: 'Cancel own trip' },
+  { code: 'TRIP_DELETE', description: 'Delete trip' },
+  { code: 'TRIP_RESTORE', description: 'Restore trip' },
 
   // Refueling
   { code: 'REFUELING_CREATE', description: 'Create refueling' },
   { code: 'REFUELING_VIEW_OWN', description: 'View own refuelings' },
   { code: 'REFUELING_VIEW_ALL', description: 'View all refuelings' },
+  { code: 'REFUELING_DELETE', description: 'Delete refueling' },
+  { code: 'REFUELING_RESTORE', description: 'Restore refueling' },
 
   // Incident
   { code: 'INCIDENT_CREATE', description: 'Create incident' },
   { code: 'INCIDENT_VIEW_OWN', description: 'View own incidents' },
   { code: 'INCIDENT_VIEW_ALL', description: 'View all incidents' },
+  { code: 'INCIDENT_DELETE', description: 'Delete incident' },
+  { code: 'INCIDENT_RESTORE', description: 'Restore incident' },
 
   // Driver
   { code: 'DRIVER_VIEW', description: 'View drivers' },
-  { code: 'DRIVER_CREATE', description: 'Create driver' },
   { code: 'DRIVER_UPDATE', description: 'Update driver' },
+  { code: 'DRIVER_DELETE', description: 'Delete driver' },
+  { code: 'DRIVER_RESTORE', description: 'Restore driver' },
 
   // Vehicle
   { code: 'VEHICLE_VIEW', description: 'View vehicles' },
   { code: 'VEHICLE_CREATE', description: 'Create vehicle' },
   { code: 'VEHICLE_UPDATE', description: 'Update vehicle' },
+  { code: 'VEHICLE_DELETE', description: 'Delete vehicle' },
+  { code: 'VEHICLE_RESTORE', description: 'Restore vehicle' },
 
   // Maintenance
   { code: 'MAINTENANCE_VIEW_ALL', description: 'View all maintenance' },
   { code: 'MAINTENANCE_CREATE', description: 'Create maintenance' },
   { code: 'MAINTENANCE_UPDATE', description: 'Update maintenance' },
+  { code: 'MAINTENANCE_DELETE', description: 'Delete maintenance' },
+  { code: 'MAINTENANCE_RESTORE', description: 'Restore maintenance' },
 
   // Analytics
   { code: 'ANALYTICS_VIEW', description: 'View analytics' },
@@ -46,9 +57,13 @@ const permissoes = [
   { code: 'PASSWORD_CHANGE_OWN', description: 'Change own password' },
 
   // User, role, permission and audit (admin)
+  { code: 'USER_VIEW', description: 'View users' },
   { code: 'USER_CREATE', description: 'Create user' },
   { code: 'USER_UPDATE', description: 'Update user' },
   { code: 'USER_DELETE', description: 'Delete user' },
+  { code: 'USER_RESTORE', description: 'Restore user' },
+  { code: 'USER_ROLE_PROMOTE', description: 'Promote user role' },
+  { code: 'USER_ROLE_DEMOTE', description: 'Demote user role' },
   { code: 'ROLE_MANAGE', description: 'Manage roles' },
   { code: 'PERMISSION_MANAGE', description: 'Manage permissions' },
   { code: 'AUDIT_VIEW', description: 'View audit logs' },
@@ -60,6 +75,7 @@ const permissoesObsoletas = [
   'INCIDENT_UPDATE',
   'MAINTENANCE_VIEW',
   'TRIP_CANCEL',
+  'DRIVER_CREATE',
 ];
 
 const papeis = [
@@ -85,7 +101,6 @@ const codigosMotorista = [
 // O gerente tem tudo do motorista mais estes.
 const codigosExtrasGerente = [
   'DRIVER_VIEW',
-  'DRIVER_CREATE',
   'DRIVER_UPDATE',
   'VEHICLE_VIEW',
   'VEHICLE_CREATE',
@@ -97,6 +112,15 @@ const codigosExtrasGerente = [
   'MAINTENANCE_CREATE',
   'MAINTENANCE_UPDATE',
   'ANALYTICS_VIEW',
+  // O gerente cria usuários, mas só com papel DRIVER (regra no serviço).
+  'USER_CREATE',
+  // Soft delete e restore: só onde o gerente já podia (veículos, manutenções, incidentes).
+  'VEHICLE_DELETE',
+  'VEHICLE_RESTORE',
+  'MAINTENANCE_DELETE',
+  'MAINTENANCE_RESTORE',
+  'INCIDENT_DELETE',
+  'INCIDENT_RESTORE',
 ];
 
 function montarPermissoesPorPapel() {

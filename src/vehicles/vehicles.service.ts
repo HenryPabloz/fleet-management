@@ -83,6 +83,37 @@ export class VehiclesService {
     return montarPaginacao(dados, total, paginacao.page, paginacao.pageSize);
   }
 
+  // Veículos com status IN_USE.
+  listarEmUso(page?: number, pageSize?: number) {
+    return this.listar(page, pageSize, 'IN_USE');
+  }
+
+  // Veículos com qualquer status diferente de IN_USE (ou só o status pedido).
+  async listarForaDeUso(
+    page?: number,
+    pageSize?: number,
+    status?: string,
+  ): Promise<ResultadoPaginado<unknown>> {
+    const paginacao = normalizarPaginacao(page, pageSize);
+
+    let where: Record<string, unknown> = { status: { not: 'IN_USE' } };
+    if (status) {
+      where = { status };
+    }
+
+    const [dados, total] = await Promise.all([
+      this.servicoPrisma.comSoftDelete.vehicle.findMany({
+        where,
+        skip: (paginacao.page - 1) * paginacao.pageSize,
+        take: paginacao.pageSize,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.servicoPrisma.comSoftDelete.vehicle.count({ where }),
+    ]);
+
+    return montarPaginacao(dados, total, paginacao.page, paginacao.pageSize);
+  }
+
   async buscarPorId(id: string) {
     const veiculo = await this.servicoPrisma.comSoftDelete.vehicle.findUnique({
       where: { id },

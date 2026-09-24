@@ -11,12 +11,23 @@ const RESUMO_DOS_PAPEIS: Record<string, string> = {
   ADMIN: 'Administrador: acesso total, inclusive usuários e deleção permanente.',
 };
 
-// As 3 rotas que recebem roleId, com o schema e o corpo de exemplo de cada uma.
+// As rotas que recebem roleId, com o schema e o corpo de exemplo de cada uma.
 const ROTAS_COM_ROLE = [
   { caminho: '/users', metodo: 'post', schema: 'CreateUserDto' },
   { caminho: '/users/{id}', metodo: 'patch', schema: 'UpdateUserDto' },
   { caminho: '/users/{id}', metodo: 'put', schema: 'ReplaceUserDto' },
+  { caminho: '/users/{id}/role', metodo: 'patch', schema: 'TrocarRoleDto' },
 ];
+
+// Regra extra de cada rota, escrita junto da tabela de IDs.
+const REGRA_POR_SCHEMA: Record<string, string> = {
+  CreateUserDto:
+    '\n\n**Quem atribui o quê:** ADMIN atribui qualquer role; quem não é ADMIN (ex: FLEET_MANAGER) só cria `DRIVER` (senão 403). ' +
+    'O exemplo `DRIVER` leva o bloco `driver` (obrigatório para essa role); as demais roles não levam `driver` (400 se enviado).',
+  TrocarRoleDto:
+    '\n\n**Regras:** só ADMIN. Subir exige `USER_ROLE_PROMOTE`, descer exige `USER_ROLE_DEMOTE`. ADMIN não é rebaixado (403). ' +
+    'Ao virar `DRIVER` sem perfil de motorista, envie o bloco `driver` (o exemplo `DRIVER` mostra); nas outras roles `driver` não é aceito.',
+};
 
 // Sufixo sorteado a cada boot: o e-mail de exemplo nunca colide com uma conta já existente
 // (um e-mail fixo como novo.driver@fleet.com dava 409 se alguém já tivesse cadastrado).
@@ -24,13 +35,25 @@ const SUFIXO_DO_EXEMPLO = Math.random().toString(36).slice(2, 8);
 
 function montarCorpoDeExemplo(schema: string, roleId: string, nomeDoPapel: string) {
   if (schema === 'CreateUserDto') {
-    return {
+    const corpo: Record<string, unknown> = {
       email: `exemplo.${nomeDoPapel.toLowerCase()}.${SUFIXO_DO_EXEMPLO}@exemplo.com`,
       password: 'SenhaForte123',
       fullName: `Usuário ${nomeDoPapel}`,
       roleId,
       isActive: true,
     };
+    // Só o exemplo de DRIVER leva o bloco que cria o perfil de motorista junto.
+    if (nomeDoPapel === 'DRIVER') {
+      corpo.driver = { licenseNumber: '12345678900', licenseExpiry: '2030-08-30' };
+    }
+    return corpo;
+  }
+  if (schema === 'TrocarRoleDto') {
+    const corpoTroca: Record<string, unknown> = { roleId };
+    if (nomeDoPapel === 'DRIVER') {
+      corpoTroca.driver = { licenseNumber: '12345678900', licenseExpiry: '2030-08-30' };
+    }
+    return corpoTroca;
   }
   if (schema === 'ReplaceUserDto') {
     return { fullName: `Usuário ${nomeDoPapel}`, roleId, isActive: true };
@@ -76,7 +99,7 @@ export async function enriquecerSwaggerComRoles(
       if (!operacao) {
         continue;
       }
-      operacao.description = (operacao.description ?? '') + tabela;
+      operacao.description = (operacao.description ?? '') + tabela + (REGRA_POR_SCHEMA[rota.schema] ?? '');
 
       const conteudo = (operacao.requestBody as any)?.content?.['application/json'];
       if (conteudo) {
@@ -93,7 +116,7 @@ export async function enriquecerSwaggerComRoles(
 
     // Troca o UUID inventado do schema por um ID real (DRIVER, o mais seguro).
     const schemas = documento.components?.schemas as Record<string, any> | undefined;
-    for (const nome of ['CreateUserDto', 'UpdateUserDto', 'ReplaceUserDto']) {
+    for (const nome of ['CreateUserDto', 'UpdateUserDto', 'ReplaceUserDto', 'TrocarRoleDto']) {
       const propriedade = schemas?.[nome]?.properties?.roleId;
       if (propriedade) {
         propriedade.example = idDoDriver;

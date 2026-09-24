@@ -8,6 +8,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/database/prisma.service';
+import { dataFutura as dataFuturaIso } from './helpers/usuarios-e2e';
 
 const SENHA = 'SenhaForte123';
 
@@ -120,13 +121,14 @@ describe('Vehicles e Maintenances (e2e)', () => {
     roleIdDriver = papelDriver.id;
 
     // Usuário DRIVER para testar as restrições de RBAC (token assinado direto,
-    // sem passar pelo fluxo completo de signup/login por API key).
+    // sem passar pelo login por API key).
     const usuarioDriver = await autenticado(tokenAdmin, 'post', '/users')
       .send({
         email: novoEmail(),
         password: SENHA,
         fullName: 'Motorista Teste Vehicles',
         roleId: roleIdDriver,
+        driver: { licenseNumber: novaCnh(), licenseExpiry: dataFuturaIso() },
       })
       .expect(201);
     idsDeUsuarioParaLimpar.push(usuarioDriver.body.id);
@@ -300,19 +302,12 @@ describe('Vehicles e Maintenances (e2e)', () => {
           password: SENHA,
           fullName: 'Motorista Teste Trip',
           roleId: roleIdDriver,
+          driver: { licenseNumber: novaCnh(), licenseExpiry: dataFuturaIso() },
         })
         .expect(201);
       idsDeUsuarioParaLimpar.push(usuarioMotorista.body.id);
 
-      const dataFutura = new Date();
-      dataFutura.setFullYear(dataFutura.getFullYear() + 1);
-      const driver = await autenticado(tokenAdmin, 'post', '/drivers')
-        .send({
-          userId: usuarioMotorista.body.id,
-          licenseNumber: novaCnh(),
-          licenseExpiry: dataFutura.toISOString(),
-        })
-        .expect(201);
+      const driver = { body: { ...usuarioMotorista.body.driver, userId: usuarioMotorista.body.id } };
       idsDeDriverParaLimpar.push(driver.body.id);
 
       const trip = await prisma.trip.create({
@@ -767,6 +762,109 @@ describe('Vehicles e Maintenances (e2e)', () => {
       for (const veiculo of resposta.body.data) {
         expect(veiculo.status).toEqual('AVAILABLE');
       }
+    });
+  });
+
+describe('Vehicles: em uso e fora de uso', () => {
+    let idEmUso: string;
+    let idDisponivel: string;
+    let idEmManutencao: string;
+
+    async function ids(caminho: string): Promise<string[]> {
+      const resposta = await autenticado(tokenAdmin, 'get', caminho).expect(200);
+      return resposta.body.data.map((item: { id: string }) => item.id);
+    }
+
+    it('cria veículos AVAILABLE, IN_MAINTENANCE e um IN_USE (viagem)', async () => {
+      const emUso = await criarVeiculo();
+      const disponivel = await criarVeiculo();
+      const emManutencao = await criarVeiculo({ status: 'IN_MAINTENANCE' });
+      idEmUso = emUso.id;
+      idDisponivel = disponivel.id;
+      idEmManutencao = emManutencao.id;
+
+      const usuario = await autenticado(tokenAdmin, 'post', '/users')
+        .send({
+          email: novoEmail(),
+          password: SENHA,
+          fullName: 'Motorista Teste Em Uso',
+          roleId: roleIdDriver,
+          driver: { licenseNumber: novaCnh(), licenseExpiry: dataFuturaIso() },
+        })
+        .expect(201);
+      idsDeUsuarioParaLimpar.push(usuario.body.id);
+
+      const driver = { body: { ...usuario.body.driver, userId: usuario.body.id } };
+      idsDeDriverParaLimpar.push(driver.body.id);
+
+      // O trigger do banco marca o veículo como IN_USE ao criar a viagem.
+      const trip = await prisma.trip.create({
+        data: {
+          driverId: driver.body.id,
+          vehicleId: idEmUso,
+          status: 'PLANNED',
+          startKm: emUso.currentMileage,
+          startLocation: 'São Paulo, SP',
+          endLocation: 'Campinas, SP',
+          createdBy: userIdAdmin,
+        },
+      });
+      idsDeTripParaLimpar.push(trip.id);
+    });
+
+    it('GET /vehicles/in-use traz só o veículo em uso', async () => {
+      const lista = await ids('/vehicles/in-use?pageSize=100');
+      expect(lista).toContain(idEmUso);
+      expect(lista).not.toContain(idDisponivel);
+      expect(lista).not.toContain(idEmManutencao);
+      const resposta = await autenticado(tokenAdmin, 'get', '/vehicles/in-use?pageSize=100').expect(200);
+      for (const veiculo of resposta.body.data) {
+        expect(veiculo.status).toEqual('IN_USE');
+      }
+    });
+
+    it('GET /vehicles/not-in-use traz os não usados e nenhum IN_USE', async () => {
+      const lista = await ids('/vehicles/not-in-use?pageSize=100');
+      expect(lista).toContain(idDisponivel);
+      expect(lista).toContain(idEmManutencao);
+      expect(lista).not.toContain(idEmUso);
+      const resposta = await autenticado(tokenAdmin, 'get', '/vehicles/not-in-use?pageSize=100').expect(200);
+      for (const veiculo of resposta.body.data) {
+        expect(veiculo.status).not.toEqual('IN_USE');
+      }
+    });
+
+    it('GET /vehicles/not-in-use?status=IN_MAINTENANCE filtra e status=IN_USE dá 400', async () => {
+      const resposta = await autenticado(
+        tokenAdmin,
+        'get',
+        '/vehicles/not-in-use?status=IN_MAINTENANCE&pageSize=100',
+      ).expect(200);
+      for (const veiculo of resposta.body.data) {
+        expect(veiculo.status).toEqual('IN_MAINTENANCE');
+      }
+      await autenticado(tokenAdmin, 'get', '/vehicles/not-in-use?status=IN_USE').expect(400);
+    });
+
+    it('em uso + fora de uso = total de GET /vehicles', async () => {
+      // Outros testes podem criar veículos ao mesmo tempo; tenta algumas vezes.
+      let bateu = false;
+      for (let tentativa = 0; tentativa < 5 && !bateu; tentativa++) {
+        const emUso = await autenticado(tokenAdmin, 'get', '/vehicles/in-use').expect(200);
+        const foraDeUso = await autenticado(tokenAdmin, 'get', '/vehicles/not-in-use').expect(200);
+        const todos = await autenticado(tokenAdmin, 'get', '/vehicles').expect(200);
+        const soma = emUso.body.pagination.total + foraDeUso.body.pagination.total;
+        if (soma === todos.body.pagination.total) {
+          bateu = true;
+        }
+      }
+      expect(bateu).toBe(true);
+    });
+
+    it('GET /vehicles/in-use e not-in-use: DRIVER pode (200), sem token dá 401', async () => {
+      await autenticado(tokenDriver, 'get', '/vehicles/in-use').expect(200);
+      await autenticado(tokenDriver, 'get', '/vehicles/not-in-use').expect(200);
+      await request(app.getHttpServer()).get('/vehicles/in-use').expect(401);
     });
   });
 });

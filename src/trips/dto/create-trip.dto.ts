@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID, MaxLength } from 'class-validator';
 import { IsValidCep } from '../../common/validators/is-valid-cep.validator';
 
 // startLocation/endLocation passam a exigir um CEP brasileiro real (validado
@@ -20,14 +20,6 @@ export class CreateTripDto {
   })
   @IsUUID()
   vehicleId!: string;
-
-  @ApiProperty({
-    description: 'Quilometragem do veículo no início da viagem.',
-    example: 15000,
-  })
-  @IsInt()
-  @Min(0)
-  startKm!: number;
 
   @ApiProperty({
     description:

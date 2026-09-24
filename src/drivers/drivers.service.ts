@@ -11,7 +11,6 @@ import {
   normalizarPaginacao,
   ResultadoPaginado,
 } from '../common/utils/paginacao.util';
-import { CreateDriverDto } from './dto/create-driver.dto';
 import { ReplaceDriverDto } from './dto/replace-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
 
@@ -49,50 +48,6 @@ export class DriversService {
       throw new NotFoundException('Driver not found');
     }
     return motorista;
-  }
-
-  async criar(dados: CreateDriverDto) {
-    // comSoftDelete: um usuário soft-deletado não pode virar motorista.
-    const usuario = await this.servicoPrisma.comSoftDelete.user.findUnique({
-      where: { id: dados.userId },
-    });
-    if (!usuario) {
-      throw new BadRequestException('userId does not exist');
-    }
-
-    // Consulta o registro sem filtro: a coluna userId é única no banco mesmo
-    // para um driver soft-deletado, então já bloqueamos aqui com uma mensagem clara.
-    const driverJaExiste = await this.servicoPrisma.driver.findUnique({
-      where: { userId: dados.userId },
-    });
-    if (driverJaExiste) {
-      throw new ConflictException('User already has a driver');
-    }
-
-    const licenseNumberJaExiste = await this.servicoPrisma.driver.findUnique({
-      where: { licenseNumber: dados.licenseNumber },
-    });
-    if (licenseNumberJaExiste) {
-      throw new ConflictException('License number already registered');
-    }
-
-    if (new Date(dados.licenseExpiry) < new Date()) {
-      throw new BadRequestException('licenseExpiry cannot be in the past');
-    }
-
-    let isActive = true;
-    if (dados.isActive !== undefined) {
-      isActive = dados.isActive;
-    }
-
-    return this.servicoPrisma.driver.create({
-      data: {
-        userId: dados.userId,
-        licenseNumber: dados.licenseNumber,
-        licenseExpiry: new Date(dados.licenseExpiry),
-        isActive,
-      },
-    });
   }
 
   async atualizarParcial(id: string, dados: UpdateDriverDto) {

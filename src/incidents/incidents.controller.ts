@@ -155,11 +155,11 @@ export class IncidentsController {
 
   // Precisa vir antes de "GET /:id", senão "deleted" seria lido como um id.
   @Get('deleted/all')
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Permissions('INCIDENT_RESTORE')
   @ApiOperation({
     summary: 'Lista incidentes removidos (soft delete), paginado',
     description:
-      'Lista incidentes já removidos logicamente (deletedAt preenchido), paginado. Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      'Lista incidentes já removidos logicamente (deletedAt preenchido), paginado. Acesso: permission `INCIDENT_RESTORE` (ADMIN; FLEET_MANAGER por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `incidents`.',
     ...({ 'x-database-tables': { read: ['incidents'] } } as Record<string, unknown>),
   })
@@ -216,7 +216,7 @@ export class IncidentsController {
       'campos de formulário, e a foto (opcional) vai no campo de arquivo `photo` (aceita ' +
       'image/jpeg, image/png ou application/pdf, até 10MB). Se enviada, a foto é salva em disco ' +
       '(`uploads/incidents/`) e o registro guarda `photoUrl`/`photoKey`; sem foto, os dois campos ' +
-      'ficam `null`. Chama a procedure `register_incident`. Acesso: ADMIN, FLEET_MANAGER, DRIVER.\n\n' +
+      'ficam `null`. `tripId` é opcional (o incidente pode ocorrer fora de viagem); se informado, a viagem precisa estar `IN_PROGRESS` e ser do mesmo veículo e motorista. Chama a procedure `register_incident`. Acesso: ADMIN, FLEET_MANAGER, DRIVER.\n\n' +
       'Erros mais prováveis da procedure (SQLSTATE P0001, traduzidos para HTTP): veículo ou ' +
       'motorista não encontrado (404), motorista inativo (409), `tripId` informado mas motorista ' +
       'não corresponde ao motorista da viagem, ou viagem não está IN_PROGRESS (409), tipo/' +
@@ -236,11 +236,11 @@ export class IncidentsController {
       type: 'object',
       required: ['vehicleId', 'driverId', 'type', 'severity', 'description'],
       properties: {
-        tripId: { type: 'string', format: 'uuid', nullable: true, description: 'Viagem relacionada (opcional).' },
-        vehicleId: { type: 'string', format: 'uuid' },
-        driverId: { type: 'string', format: 'uuid' },
-        type: { type: 'string', enum: ['ACCIDENT', 'MECHANICAL_FAILURE', 'OTHER'] },
-        severity: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH'] },
+        tripId: { type: 'string', format: 'uuid', nullable: true, description: 'Viagem relacionada (opcional; se informada, precisa estar IN_PROGRESS).', example: 'c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f' },
+        vehicleId: { type: 'string', format: 'uuid', example: '9f8e7d6c-5b4a-4c2d-8e0f-a1b2c3d4e5f6' },
+        driverId: { type: 'string', format: 'uuid', example: 'b3c1a2e4-6f5d-4a8b-9c2e-1a2b3c4d5e6f' },
+        type: { type: 'string', enum: ['ACCIDENT', 'MECHANICAL_FAILURE', 'OTHER'], example: 'MECHANICAL_FAILURE' },
+        severity: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH'], example: 'MEDIUM' },
         description: { type: 'string', maxLength: 1000, example: 'Pane no motor durante a viagem' },
         photo: {
           type: 'string',
@@ -316,7 +316,7 @@ export class IncidentsController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Permissions('INCIDENT_DELETE')
   @HttpCode(204)
   @ApiOperation({
     summary: 'Remove um incidente (soft delete)',
@@ -324,7 +324,7 @@ export class IncidentsController {
       'Marca `deletedAt` no incidente; a linha continua no banco e pode ser restaurada em ' +
       '`PATCH /incidents/:id/restore`. O arquivo físico da foto (se houver) não é apagado aqui — ' +
       'o incidente pode ser restaurado depois e a foto precisa continuar existindo. Acesso: ' +
-      'ADMIN, FLEET_MANAGER.\n\n' +
+      'permission `INCIDENT_DELETE` (ADMIN; FLEET_MANAGER por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `incidents`; escreve em `incidents`.',
     ...({
       'x-database-tables': { read: ['incidents'], write: ['incidents'] },
@@ -341,12 +341,12 @@ export class IncidentsController {
   }
 
   @Patch(':id/restore')
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Permissions('INCIDENT_RESTORE')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Restaura um incidente removido',
     description:
-      'Limpa `deletedAt`, revertendo o soft delete. Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      'Limpa `deletedAt`, revertendo o soft delete. Acesso: permission `INCIDENT_RESTORE` (ADMIN; FLEET_MANAGER por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `incidents`; escreve em `incidents`.',
     ...({
       'x-database-tables': { read: ['incidents'], write: ['incidents'] },

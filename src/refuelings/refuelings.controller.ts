@@ -138,11 +138,11 @@ export class RefuelingsController {
 
   // Precisa vir antes de "GET /:id", senão "deleted" seria lido como um id.
   @Get('deleted/all')
-  @Roles('ADMIN')
+  @Permissions('REFUELING_RESTORE')
   @ApiOperation({
     summary: 'Lista abastecimentos removidos (soft delete), paginado',
     description:
-      'Lista abastecimentos já removidos logicamente (deletedAt preenchido), paginado. Acesso: ADMIN.\n\n' +
+      'Lista abastecimentos já removidos logicamente (deletedAt preenchido), paginado. Acesso: permission `REFUELING_RESTORE` (ADMIN por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `refuelings`.',
     ...({ 'x-database-tables': { read: ['refuelings'] } } as Record<string, unknown>),
   })
@@ -192,8 +192,9 @@ export class RefuelingsController {
   @ApiOperation({
     summary: 'Registra um abastecimento',
     description:
-      'Chama a procedure `register_refueling`, que calcula `totalCost` (litersAdded x ' +
-      'costPerLiter) e atualiza `vehicles.currentMileage` — `totalCost` não é aceito do cliente, ' +
+      'Regras: `mileage` (hodômetro; > 0 e não menor que a atual do veículo), `litersAdded` (> 0), `costPerLiter` (> 0) e `fuelType` (DIESEL, GASOLINE, ETHANOL, HYBRID); veículo fora de serviço é recusado; motorista precisa estar ativo e, se o veículo está em viagem ativa, ser o da viagem. ' +
+      'Chama a procedure `register_refueling`, que calcula `totalCost = round(litersAdded x ' +
+      'costPerLiter, 2)` e atualiza `vehicles.currentMileage` — `totalCost` não é aceito do cliente, ' +
       'nem existe no corpo da requisição. Sem `PATCH`/`PUT`: abastecimento é registro histórico; ' +
       'editar a quilometragem depois desincronizaria `vehicles.currentMileage` (o trigger de ' +
       'sincronia dispara de novo em qualquer UPDATE de mileage). Corrigir um lançamento errado é ' +
@@ -227,13 +228,13 @@ export class RefuelingsController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Permissions('REFUELING_DELETE')
   @HttpCode(204)
   @ApiOperation({
     summary: 'Remove um abastecimento (soft delete)',
     description:
       'Marca `deletedAt` no abastecimento; a linha continua no banco e pode ser restaurada em ' +
-      '`PATCH /refuelings/:id/restore`. Acesso: ADMIN.\n\n' +
+      '`PATCH /refuelings/:id/restore`. Acesso: permission `REFUELING_DELETE` (ADMIN por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `refuelings`; escreve em `refuelings`.',
     ...({
       'x-database-tables': { read: ['refuelings'], write: ['refuelings'] },
@@ -250,12 +251,12 @@ export class RefuelingsController {
   }
 
   @Patch(':id/restore')
-  @Roles('ADMIN')
+  @Permissions('REFUELING_RESTORE')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Restaura um abastecimento removido',
     description:
-      'Limpa `deletedAt`, revertendo o soft delete. Acesso: ADMIN.\n\n' +
+      'Limpa `deletedAt`, revertendo o soft delete. Acesso: permission `REFUELING_RESTORE` (ADMIN por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `refuelings`; escreve em `refuelings`.',
     ...({
       'x-database-tables': { read: ['refuelings'], write: ['refuelings'] },

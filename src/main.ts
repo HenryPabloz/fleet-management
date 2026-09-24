@@ -67,7 +67,13 @@ async function bootstrap() {
   const documento = SwaggerModule.createDocument(app, documentoSwagger);
   // Coloca no Swagger os IDs reais das roles deste ambiente.
   await enriquecerSwaggerComRoles(documento, app.get(PrismaService));
-  SwaggerModule.setup('api/docs', app, documento);
+  // CSS extra: destaca os códigos (ex: IDs das roles) SÓ na descrição da operação.
+  // Bodys de exemplo, schemas e descrições de campos ficam com a cor padrão do Swagger.
+  const cssDosCodigos =
+    '.swagger-ui .opblock-description-wrapper .renderedMarkdown code {' +
+    ' background: #0400e0 !important; color: #ffffff !important; font-weight: 700 !important;' +
+    ' padding: 2px 6px !important; border-radius: 4px !important; border: 1px solid #0400e0 !important; }';
+  SwaggerModule.setup('api/docs', app, documento, { customCss: cssDosCodigos });
 
   await app.listen(porta);
 }

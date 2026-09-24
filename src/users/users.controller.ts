@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   Param,
   ParseUUIDPipe,
@@ -33,12 +34,19 @@ import { NomePipe } from '../common/pipes/name-pipe';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
 import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
+import { RegenerateApiKeyResponseDto } from '../auth/dto/regenerate-api-key-response.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ReplaceUserDto } from './dto/replace-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateMeuPerfilDto } from './dto/update-meu-perfil.dto';
 import { TrocarSenhaDto } from './dto/trocar-senha.dto';
-import { UserRemovidoRespostaDto, UserRespostaDto } from './dto/user-response.dto';
+import { TrocarRoleDto } from './dto/trocar-role.dto';
+import {
+  UserComMotoristaRespostaDto,
+  UserCriadoRespostaDto,
+  UserRemovidoRespostaDto,
+  UserRespostaDto,
+} from './dto/user-response.dto';
 import { UsersService } from './users.service';
 
 // Query de paginação comum às duas rotas de listagem (GET / e GET /deleted/all).
@@ -59,18 +67,18 @@ const QUERY_PAGE_SIZE = {
 
 @ApiTags('users')
 @ApiBearerAuth('jwt')
-@ApiExtraModels(ProblemDetailsDto, PaginacaoMetadataDto, UserRespostaDto, UserRemovidoRespostaDto)
+@ApiExtraModels(ProblemDetailsDto, PaginacaoMetadataDto, UserRespostaDto, UserRemovidoRespostaDto, UserCriadoRespostaDto, UserComMotoristaRespostaDto)
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class UsersController {
   constructor(private servicoUsers: UsersService) {}
 
   @Get()
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Permissions('USER_VIEW')
   @ApiOperation({
     summary: 'Lista usuários (paginado)',
     description:
-      'Lista usuários ativos (não removidos), paginado. Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      'Lista usuários ativos (não removidos), paginado. Acesso: permission `USER_VIEW` (ADMIN por papel; FLEET_MANAGER só se receber por delegação).\n\n' +
       '`x-database-tables`: lê `users`.',
     ...({ 'x-database-tables': { read: ['users'] } } as Record<string, unknown>),
   })
@@ -98,11 +106,11 @@ export class UsersController {
 
   // Precisa vir antes de "GET /:id", senão "deleted" seria lido como um id.
   @Get('deleted/all')
-  @Roles('ADMIN')
+  @Permissions('USER_RESTORE')
   @ApiOperation({
     summary: 'Lista usuários removidos (soft delete), paginado',
     description:
-      'Lista usuários já removidos logicamente (deletedAt preenchido), paginado. Acesso: ADMIN.\n\n' +
+      'Lista usuários já removidos logicamente (deletedAt preenchido), paginado. Acesso: permission `USER_RESTORE` (ADMIN por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `users`.',
     ...({ 'x-database-tables': { read: ['users'] } } as Record<string, unknown>),
   })
@@ -206,11 +214,11 @@ export class UsersController {
   }
 
   @Get(':id')
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Permissions('USER_VIEW')
   @ApiOperation({
     summary: 'Busca um usuário por id',
     description:
-      'Busca um usuário ativo pelo id. Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      'Busca um usuário ativo pelo id. Acesso: permission `USER_VIEW` (ADMIN por papel; FLEET_MANAGER só se receber por delegação).\n\n' +
       '`x-database-tables`: lê `users`.',
     ...({ 'x-database-tables': { read: ['users'] } } as Record<string, unknown>),
   })
@@ -227,28 +235,98 @@ export class UsersController {
   @Post()
   @Permissions('USER_CREATE')
   @HttpCode(201)
+  @Header('Cache-Control', 'no-store')
   @ApiOperation({
-    summary: 'Cria um usuário',
+    summary: 'Cria um usuário (e gera a API key dele)',
     description:
-      'Cria um usuário com o papel (`roleId`) informado. Acesso: quem tiver a permissão `USER_CREATE` ' +
-      '(ADMIN tem por papel; outros papéis podem receber via delegação granular em `POST /users/:id/permissions`).\n\n' +
-      '`x-database-tables`: lê `users` (checa e-mail duplicado), `roles` (valida roleId); escreve em `users`.',
+      'Único caminho de cadastro do sistema (não existe cadastro público). Cria o usuário com o papel (`roleId`) ' +
+      'informado, gera a API key, grava só o hash e devolve a chave em texto (`apiKey`) UMA única vez: ' +
+      'guarde e entregue ao usuário; ela não é mostrada de novo (perdeu? `POST /users/{id}/regenerate-api-key`, só ADMIN). ' +
+      'Com papel DRIVER o bloco `driver` (`licenseNumber` com 11 dígitos, `licenseExpiry`) é OBRIGATÓRIO e cria conta + perfil ' +
+      'de motorista na mesma transação; com outro papel, `driver` retorna 400. ' +
+      'Quem pode atribuir o quê: ADMIN atribui qualquer papel; quem não é ADMIN (ex: FLEET_MANAGER, que tem `USER_CREATE` por padrão) ' +
+      'só cria usuários DRIVER, senão 403. Acesso: permission `USER_CREATE`.\n\n' +
+      '`x-database-tables`: lê `users` (checa e-mail duplicado), `roles` (valida roleId), `drivers` (CNH duplicada); escreve em `users` e, com `driver`, em `drivers`.',
     ...({
-      'x-database-tables': { read: ['users', 'roles'], write: ['users'] },
+      'x-database-tables': { read: ['users', 'roles', 'drivers'], write: ['users', 'drivers'] },
     } as Record<string, unknown>),
   })
   @ApiBody({ type: CreateUserDto })
-  @ApiResponse({ status: 201, description: 'Usuário criado.', type: UserRespostaDto })
-  @ApiResponse({ status: 400, description: 'Corpo inválido ou `roleId` inexistente.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 201, description: 'Usuário criado; traz `apiKey` (só desta vez) e `driver` quando houver.', type: UserCriadoRespostaDto })
+  @ApiResponse({ status: 400, description: 'Corpo inválido, `roleId` inexistente, DRIVER sem bloco `driver`, `driver` com papel diferente de DRIVER ou CNH vencida.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 409, description: 'E-mail já cadastrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Sem a permission `USER_CREATE`, ou quem não é ADMIN tentou criar papel diferente de DRIVER.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 409, description: 'E-mail já cadastrado ou CNH (bloco `driver`) já cadastrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   criar(
     @Body() dados: CreateUserDto,
     // Roda separado só pela validação; os dados de verdade vêm de dados.
     @Body('fullName', NomePipe) _fullName: string,
+    @CurrentUser() usuario: UsuarioLogado,
   ) {
-    return this.servicoUsers.criar(dados);
+    return this.servicoUsers.criar(dados, usuario);
+  }
+
+  // Só ADMIN, e ainda exige a permission da direção (conferida no serviço).
+  @Patch(':id/role')
+  @Roles('ADMIN')
+  @Permissions('USER_ROLE_PROMOTE', 'USER_ROLE_DEMOTE')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Sobe ou desce o papel de um usuário',
+    description:
+      'Troca o papel (`roleId`) de um usuário. Ranking: DRIVER < FLEET_MANAGER < ADMIN. Subir exige `USER_ROLE_PROMOTE`; ' +
+      'descer exige `USER_ROLE_DEMOTE` (ADMIN tem as duas por padrão). Acesso: somente ADMIN. ' +
+      'Regras: um ADMIN nunca é rebaixado (403); ninguém altera o próprio papel (409); o mesmo papel retorna 409; ' +
+      'ao virar DRIVER sem perfil de motorista o bloco `driver` é obrigatório (se já tem perfil, ele é mantido). ' +
+      'A mudança vale na hora, inclusive para o JWT já emitido (o papel é lido do banco a cada requisição).\n\n' +
+      '`x-database-tables`: lê `users`, `roles`, `role_permissions`, `user_permissions`, `drivers`; escreve em `users` e, se criar perfil, em `drivers`.',
+    ...({
+      'x-database-tables': {
+        read: ['users', 'roles', 'role_permissions', 'user_permissions', 'drivers'],
+        write: ['users', 'drivers'],
+      },
+    } as Record<string, unknown>),
+  })
+  @ApiParam({ name: 'id', description: 'Id do usuário (UUID).', format: 'uuid' })
+  @ApiBody({ type: TrocarRoleDto })
+  @ApiResponse({ status: 200, description: 'Papel alterado; traz `driver` se o perfil foi criado agora.', type: UserComMotoristaRespostaDto })
+  @ApiResponse({ status: 400, description: '`roleId` inexistente, `driver` ausente ao virar DRIVER sem perfil, ou `driver` com papel diferente de DRIVER.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Não é ADMIN, falta a permission da direção, ou tentou rebaixar um ADMIN.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Usuário não encontrado (ou removido).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 409, description: 'Mudança da própria role, mesmo papel atual, ou CNH já cadastrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  trocarRole(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dados: TrocarRoleDto,
+    @CurrentUser() usuario: UsuarioLogado,
+  ) {
+    return this.servicoUsers.trocarRole(id, dados, usuario);
+  }
+
+  // Poder sensível: só ADMIN, sem delegação por permissão.
+  @Post(':id/regenerate-api-key')
+  @Roles('ADMIN')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({
+    summary: 'Reemite a API key de outro usuário',
+    description:
+      'Use quando um usuário perdeu a API key: gera uma nova, grava só o hash e devolve a chave em texto ' +
+      'UMA única vez. A chave antiga deixa de valer na hora (o JWT já emitido continua válido até expirar). ' +
+      'Acesso: somente ADMIN (não delegável). Para trocar a própria chave use `PATCH /auth/regenerate-key`.\n\n' +
+      '`x-database-tables`: lê `users` (confirma que existe e não foi removido); escreve em `users` (hash da nova chave).',
+    ...({
+      'x-database-tables': { read: ['users'], write: ['users'] },
+    } as Record<string, unknown>),
+  })
+  @ApiParam({ name: 'id', description: 'Id do usuário que perdeu a chave (UUID).', format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Nova API key emitida.', type: RegenerateApiKeyResponseDto })
+  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Somente ADMIN.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 404, description: 'Usuário não encontrado (ou removido).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  regenerarApiKey(@Param('id', ParseUUIDPipe) id: string) {
+    return this.servicoUsers.regenerarApiKey(id);
   }
 
   @Patch(':id')
@@ -335,12 +413,12 @@ export class UsersController {
   }
 
   @Patch(':id/restore')
-  @Permissions('USER_DELETE')
+  @Permissions('USER_RESTORE')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Restaura um usuário removido',
     description:
-      'Limpa `deletedAt`, revertendo o soft delete. Acesso: quem tiver a permissão `USER_DELETE` ' +
+      'Limpa `deletedAt`, revertendo o soft delete. Acesso: quem tiver a permissão `USER_RESTORE` ' +
       '(ADMIN tem por papel; outros papéis podem receber via delegação granular).\n\n' +
       '`x-database-tables`: lê `users`; escreve em `users`.',
     ...({

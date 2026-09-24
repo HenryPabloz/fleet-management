@@ -2,13 +2,13 @@ import 'dotenv/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { useContainer } from 'class-validator';
-import { randomBytes, randomUUID } from 'crypto';
+import { randomUUID } from 'crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/database/prisma.service';
+import { criarUsuarioELogar } from './helpers/usuarios-e2e';
 
-const SENHA = 'SenhaForte123';
 const RECURSOS = [
   'users',
   'drivers',
@@ -36,31 +36,11 @@ describe('Hard delete só ADMIN (e2e)', () => {
       .set('Authorization', `Bearer ${token}`);
   }
 
-  // Cria via signup (sempre DRIVER) e, se pedido, promove a FLEET_MANAGER.
-  async function criarUsuarioELogar(nomeDoPapel: string) {
-    const email = `e2e-hd-${randomBytes(6).toString('hex')}@test.local`;
-    const cadastro = await request(app.getHttpServer())
-      .post('/auth/signup')
-      .send({ email, password: SENHA, fullName: `Teste ${nomeDoPapel}` })
-      .expect(201);
-    const id = cadastro.body.userId as string;
-    idsDeUsuarioParaLimpar.push(id);
-
-    if (nomeDoPapel !== 'DRIVER') {
-      const papel = await prisma.role.findUnique({ where: { name: nomeDoPapel } });
-      await request(app.getHttpServer())
-        .patch(`/users/${id}`)
-        .set('Authorization', `Bearer ${tokenAdmin}`)
-        .send({ roleId: papel?.id })
-        .expect(200);
-    }
-
-    const login = await request(app.getHttpServer())
-      .post('/auth/login')
-      .set('x-api-key', cadastro.body.apiKey)
-      .send({ email, password: SENHA })
-      .expect(200);
-    return login.body.accessToken as string;
+  // O ADMIN cria o usuário por POST /users e loga com a apiKey devolvida.
+  async function criarUsuarioELogarComToken(nomeDoPapel: string) {
+    const usuario = await criarUsuarioELogar(app, prisma, tokenAdmin, nomeDoPapel, 'e2e-hd', `Teste ${nomeDoPapel}`);
+    idsDeUsuarioParaLimpar.push(usuario.id);
+    return usuario.token;
   }
 
   beforeAll(async () => {
@@ -82,8 +62,8 @@ describe('Hard delete só ADMIN (e2e)', () => {
       .expect(200);
     tokenAdmin = login.body.accessToken;
 
-    tokenGerente = await criarUsuarioELogar('FLEET_MANAGER');
-    tokenMotorista = await criarUsuarioELogar('DRIVER');
+    tokenGerente = await criarUsuarioELogarComToken('FLEET_MANAGER');
+    tokenMotorista = await criarUsuarioELogarComToken('DRIVER');
   });
 
   afterAll(async () => {

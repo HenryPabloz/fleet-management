@@ -32,6 +32,7 @@ import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.sche
 import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { ListVehicleQueryDto } from './dto/list-vehicle-query.dto';
+import { ListVehicleNotInUseQueryDto } from './dto/list-vehicle-not-in-use-query.dto';
 import { ReplaceVehicleDto } from './dto/replace-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 import { VehiclesService } from './vehicles.service';
@@ -70,6 +71,7 @@ const VEHICLE_SCHEMA = {
     lastMaintenanceKm: { type: 'integer', example: 10000 },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
+    isActive: { type: 'boolean', example: true, readOnly: true, description: 'Somente leitura: vira false no soft delete e true no restore (não é alterável por PATCH/PUT).' },
     deletedAt: { type: 'string', format: 'date-time', nullable: true, example: null },
   },
 };
@@ -158,13 +160,82 @@ export class VehiclesController {
     return this.servicoVehicles.listar(query.page, query.pageSize, query.status);
   }
 
+  // As rotas fixas (in-use, not-in-use, deleted/all) precisam vir antes de "GET /:id",
+  // senão o texto seria lido como um id.
+  @Get('in-use')
+  @Roles('ADMIN', 'FLEET_MANAGER', 'DRIVER')
+  @ApiOperation({
+    summary: 'Lista veículos em uso (paginado)',
+    description:
+      'Veículos com status `IN_USE` (inclui os reservados por uma viagem `PLANNED`, pois a criação da ' +
+      'viagem já marca o veículo como em uso). Não aceita filtro `status` (seria redundante). ' +
+      'Junto com `GET /vehicles/not-in-use` soma o total de `GET /vehicles`. ' +
+      'Acesso: ADMIN, FLEET_MANAGER, DRIVER.\n\n' +
+      '`x-database-tables`: lê `vehicles`.',
+    ...({ 'x-database-tables': { read: ['vehicles'] } } as Record<string, unknown>),
+  })
+  @ApiQuery(QUERY_PAGE)
+  @ApiQuery(QUERY_PAGE_SIZE)
+  @ApiResponse({
+    status: 200,
+    description: 'Página de veículos em uso.',
+    schema: {
+      allOf: [
+        { properties: { data: { type: 'array', items: VEHICLE_SCHEMA } } },
+        { properties: { pagination: { $ref: getSchemaPath(PaginacaoMetadataDto) } } },
+      ],
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  listarEmUso(@Query() paginacao: PaginationQueryDto) {
+    return this.servicoVehicles.listarEmUso(paginacao.page, paginacao.pageSize);
+  }
+
+  @Get('not-in-use')
+  @Roles('ADMIN', 'FLEET_MANAGER', 'DRIVER')
+  @ApiOperation({
+    summary: 'Lista veículos fora de uso (paginado)',
+    description:
+      'Veículos com qualquer status diferente de `IN_USE`: `AVAILABLE`, `IN_MAINTENANCE` ou ' +
+      '`OUT_OF_SERVICE`. O filtro opcional `status` aceita só esses três valores (`IN_USE` é recusado com 400). ' +
+      'Junto com `GET /vehicles/in-use` soma o total de `GET /vehicles`. ' +
+      'Acesso: ADMIN, FLEET_MANAGER, DRIVER.\n\n' +
+      '`x-database-tables`: lê `vehicles`.',
+    ...({ 'x-database-tables': { read: ['vehicles'] } } as Record<string, unknown>),
+  })
+  @ApiQuery(QUERY_PAGE)
+  @ApiQuery(QUERY_PAGE_SIZE)
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['AVAILABLE', 'IN_MAINTENANCE', 'OUT_OF_SERVICE'],
+    description: 'Filtra por um status específico dentre os "fora de uso".',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Página de veículos fora de uso.',
+    schema: {
+      allOf: [
+        { properties: { data: { type: 'array', items: VEHICLE_SCHEMA } } },
+        { properties: { pagination: { $ref: getSchemaPath(PaginacaoMetadataDto) } } },
+      ],
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Parâmetro inválido (ex: `status=IN_USE`).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  listarForaDeUso(@Query() query: ListVehicleNotInUseQueryDto) {
+    return this.servicoVehicles.listarForaDeUso(query.page, query.pageSize, query.status);
+  }
+
   // Precisa vir antes de "GET /:id", senão "deleted" seria lido como um id.
   @Get('deleted/all')
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Permissions('VEHICLE_RESTORE')
   @ApiOperation({
     summary: 'Lista veículos removidos (soft delete), paginado',
     description:
-      'Lista veículos já removidos logicamente (deletedAt preenchido), paginado. Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      'Lista veículos já removidos logicamente (deletedAt preenchido), paginado. Acesso: permission `VEHICLE_RESTORE` (ADMIN; FLEET_MANAGER por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `vehicles`.',
     ...({ 'x-database-tables': { read: ['vehicles'] } } as Record<string, unknown>),
   })
@@ -325,14 +396,14 @@ export class VehiclesController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Permissions('VEHICLE_DELETE')
   @HttpCode(204)
   @ApiOperation({
     summary: 'Remove um veículo (soft delete)',
     description:
       'Marca `deletedAt` no veículo; a linha continua no banco e pode ser restaurada em ' +
       '`PATCH /vehicles/:id/restore`. Bloqueado se o veículo estiver com status `IN_USE` ' +
-      '(viagem ativa). Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      '(viagem ativa). Acesso: permission `VEHICLE_DELETE` (ADMIN; FLEET_MANAGER por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `vehicles`; escreve em `vehicles`.',
     ...({
       'x-database-tables': { read: ['vehicles'], write: ['vehicles'] },
@@ -350,12 +421,12 @@ export class VehiclesController {
   }
 
   @Patch(':id/restore')
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Permissions('VEHICLE_RESTORE')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Restaura um veículo removido',
     description:
-      'Limpa `deletedAt`, revertendo o soft delete. Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      'Limpa `deletedAt`, revertendo o soft delete. Acesso: permission `VEHICLE_RESTORE` (ADMIN; FLEET_MANAGER por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `vehicles`; escreve em `vehicles`.',
     ...({
       'x-database-tables': { read: ['vehicles'], write: ['vehicles'] },

@@ -8,6 +8,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/database/prisma.service';
+import { dataFutura as dataFuturaIso } from './helpers/usuarios-e2e';
 
 const SENHA = 'SenhaForte123';
 
@@ -62,9 +63,11 @@ describe('Users/me e Audit Logs (e2e)', () => {
   // o próprio usuário e um token assinado direto (sem passar pelo fluxo de
   // signup/API key — mesmo padrão já usado em vehicles-maintenances.e2e-spec.ts).
   async function criarUsuarioComToken(roleId: string, fullName: string) {
-    const resposta = await autenticado(tokenAdmin, 'post', '/users')
-      .send({ email: novoEmail(), password: SENHA, fullName, roleId })
-      .expect(201);
+    const corpo: Record<string, unknown> = { email: novoEmail(), password: SENHA, fullName, roleId };
+    if (roleId === roleIdDriver) {
+      corpo.driver = { licenseNumber: novaCnh(), licenseExpiry: dataFuturaIso() };
+    }
+    const resposta = await autenticado(tokenAdmin, 'post', '/users').send(corpo).expect(201);
     idsDeUsuarioParaLimpar.push(resposta.body.id);
 
     const token = servicoJwt.sign({
@@ -245,26 +248,18 @@ describe('Users/me e Audit Logs (e2e)', () => {
           password: SENHA,
           fullName: 'Motorista Para Audit Log',
           roleId: roleIdDriver,
+          driver: { licenseNumber: novaCnh(), licenseExpiry: dataFuturaIso() },
         })
         .expect(201);
       idsDeUsuarioParaLimpar.push(usuario.body.id);
 
-      const dataFutura = new Date();
-      dataFutura.setFullYear(dataFutura.getFullYear() + 1);
-      const driver = await autenticado(tokenAdmin, 'post', '/drivers')
-        .send({
-          userId: usuario.body.id,
-          licenseNumber: novaCnh(),
-          licenseExpiry: dataFutura.toISOString(),
-        })
-        .expect(201);
+      const driver = { body: { ...usuario.body.driver, userId: usuario.body.id } };
       idsDeDriverParaLimpar.push(driver.body.id);
 
       const trip = await autenticado(tokenAdmin, 'post', '/trips')
         .send({
           driverId: driver.body.id,
           vehicleId: veiculo.body.id,
-          startKm: 1000,
           startLocation: '01310-100',
           endLocation: '20040-020',
         })

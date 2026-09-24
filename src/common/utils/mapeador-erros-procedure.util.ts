@@ -21,15 +21,13 @@ const MENSAGENS_EXATAS: Record<string, number> = {
   'Driver license expired': 409,
   'Vehicle is required': 400,
   'Vehicle not found': 404,
+  'Vehicle is not active': 409,
   'Vehicle is in use': 409,
   'Vehicle is under maintenance': 409,
   'Vehicle is out of service': 409,
-  'Start km cannot be negative': 400,
-  'Start km exceeds the maximum allowed (10000000)': 400,
   'Trip not found or not in PLANNED status': 409,
   'Trip does not belong to the informed vehicle': 400,
   'Current mileage exceeds the maximum allowed (10000000)': 400,
-  'Current mileage cannot be less than start_km': 400,
   'Trip not found or not in IN_PROGRESS status': 409,
   'End mileage cannot be less than start mileage': 400,
   'End mileage exceeds the maximum allowed (10000000)': 400,
@@ -63,7 +61,6 @@ const MENSAGENS_EXATAS: Record<string, number> = {
 
 // Mensagens com número/status dinâmico no fim (ex: "... (15000)"): comparação por prefixo.
 const PREFIXOS_DINAMICOS: Array<{ prefixo: string; status: number }> = [
-  { prefixo: 'Start km cannot be less than vehicle current mileage (', status: 409 },
   { prefixo: 'Current mileage cannot be less than vehicle current mileage (', status: 409 },
   { prefixo: 'End mileage cannot be less than vehicle current mileage (', status: 409 },
   { prefixo: 'Trip cannot be cancelled (status: ', status: 409 },

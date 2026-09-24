@@ -70,6 +70,7 @@ const MAINTENANCE_SCHEMA = {
     registeredBy: { type: 'string', format: 'uuid' },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
+    isActive: { type: 'boolean', example: true, readOnly: true, description: 'Somente leitura: vira false no soft delete e true no restore (não é alterável por PATCH/PUT).' },
     deletedAt: { type: 'string', format: 'date-time', nullable: true, example: null },
   },
 };
@@ -123,11 +124,11 @@ export class MaintenancesController {
 
   // Precisa vir antes de "GET /:id", senão "deleted" seria lido como um id.
   @Get('deleted/all')
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Permissions('MAINTENANCE_RESTORE')
   @ApiOperation({
     summary: 'Lista manutenções removidas (soft delete), paginado',
     description:
-      'Lista manutenções já removidas logicamente (deletedAt preenchido), paginado. Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      'Lista manutenções já removidas logicamente (deletedAt preenchido), paginado. Acesso: permission `MAINTENANCE_RESTORE` (ADMIN; FLEET_MANAGER por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `maintenances`.',
     ...({ 'x-database-tables': { read: ['maintenances'] } } as Record<string, unknown>),
   })
@@ -288,14 +289,14 @@ export class MaintenancesController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Permissions('MAINTENANCE_DELETE')
   @HttpCode(204)
   @ApiOperation({
     summary: 'Remove uma manutenção (soft delete)',
     description:
       'Marca `deletedAt` na manutenção; a linha continua no banco e pode ser restaurada em ' +
       '`PATCH /maintenances/:id/restore`. Não reverte o status do veículo (só a conclusão da ' +
-      'manutenção sincroniza o veículo de volta). Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      'manutenção sincroniza o veículo de volta). Acesso: permission `MAINTENANCE_DELETE` (ADMIN; FLEET_MANAGER por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `maintenances`; escreve em `maintenances`.',
     ...({
       'x-database-tables': { read: ['maintenances'], write: ['maintenances'] },
@@ -312,12 +313,12 @@ export class MaintenancesController {
   }
 
   @Patch(':id/restore')
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Permissions('MAINTENANCE_RESTORE')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Restaura uma manutenção removida',
     description:
-      'Limpa `deletedAt`, revertendo o soft delete. Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      'Limpa `deletedAt`, revertendo o soft delete. Acesso: permission `MAINTENANCE_RESTORE` (ADMIN; FLEET_MANAGER por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `maintenances`; escreve em `maintenances`.',
     ...({
       'x-database-tables': { read: ['maintenances'], write: ['maintenances'] },

@@ -7,6 +7,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/database/prisma.service';
+import { dataFutura, novaCnh } from './helpers/usuarios-e2e';
 
 const SENHA = 'SenhaForte123';
 
@@ -17,6 +18,7 @@ describe('GET /roles (e2e)', () => {
   let prisma: PrismaService;
   let tokenAdmin: string;
   let roleIdFleetManager: string;
+  let roleIdDriver: string;
 
   const idsDeUsuarioParaLimpar: string[] = [];
 
@@ -26,23 +28,23 @@ describe('GET /roles (e2e)', () => {
       .set('Authorization', `Bearer ${token}`);
   }
 
-  // /auth/signup cria DRIVER; para FLEET_MANAGER ajusta o papel via PATCH (ADMIN).
+  // O ADMIN cria o usuário por POST /users (DRIVER leva o bloco driver) e usa a apiKey devolvida.
   async function criarUsuarioELogar(fleetManager: boolean) {
     const email = `e2e-roles-${randomBytes(6).toString('hex')}@test.local`;
-    const cadastro = await request(app.getHttpServer())
-      .post('/auth/signup')
-      .send({ email, password: SENHA, fullName: 'Teste Roles' })
-      .expect(201);
-    const id = cadastro.body.userId as string;
-    idsDeUsuarioParaLimpar.push(id);
-
+    const corpo: Record<string, unknown> = { email, password: SENHA, fullName: 'Teste Roles' };
     if (fleetManager) {
-      await request(app.getHttpServer())
-        .patch(`/users/${id}`)
-        .set('Authorization', `Bearer ${tokenAdmin}`)
-        .send({ roleId: roleIdFleetManager })
-        .expect(200);
+      corpo.roleId = roleIdFleetManager;
+    } else {
+      corpo.roleId = roleIdDriver;
+      corpo.driver = { licenseNumber: novaCnh(), licenseExpiry: dataFutura() };
     }
+    const cadastro = await request(app.getHttpServer())
+      .post('/users')
+      .set('Authorization', `Bearer ${tokenAdmin}`)
+      .send(corpo)
+      .expect(201);
+    const id = cadastro.body.id as string;
+    idsDeUsuarioParaLimpar.push(id);
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
@@ -81,6 +83,8 @@ describe('GET /roles (e2e)', () => {
       throw new Error('Papel FLEET_MANAGER não encontrado. O seed foi executado?');
     }
     roleIdFleetManager = papel.id;
+    const papelDriver = await prisma.role.findUnique({ where: { name: 'DRIVER' } });
+    roleIdDriver = papelDriver?.id as string;
   });
 
   afterAll(async () => {
@@ -110,16 +114,8 @@ describe('GET /roles (e2e)', () => {
     }
   });
 
-  it('FLEET_MANAGER sem concessão recebe 403', async () => {
+  it('FLEET_MANAGER recebe 200 (USER_CREATE já vem no papel, precisa listar os papéis)', async () => {
     const gerente = await criarUsuarioELogar(true);
-    await autenticado('get', '/roles', gerente.token).expect(403);
-  });
-
-  it('FLEET_MANAGER com USER_CREATE concedido recebe 200', async () => {
-    const gerente = await criarUsuarioELogar(true);
-    await autenticado('post', `/users/${gerente.id}/permissions`, tokenAdmin)
-      .send({ permissionCode: 'USER_CREATE' })
-      .expect(200);
     const resposta = await autenticado('get', '/roles', gerente.token).expect(200);
     expect(resposta.body).toHaveLength(3);
   });
@@ -127,6 +123,14 @@ describe('GET /roles (e2e)', () => {
   it('DRIVER recebe 403', async () => {
     const motorista = await criarUsuarioELogar(false);
     await autenticado('get', '/roles', motorista.token).expect(403);
+  });
+
+  it('DRIVER com USER_CREATE delegado recebe 200', async () => {
+    const motorista = await criarUsuarioELogar(false);
+    await autenticado('post', `/users/${motorista.id}/permissions`, tokenAdmin)
+      .send({ permissionCode: 'USER_CREATE' })
+      .expect(200);
+    await autenticado('get', '/roles', motorista.token).expect(200);
   });
 
   it('sem token recebe 401', async () => {

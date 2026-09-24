@@ -52,13 +52,19 @@ export class ViaCepService {
     return this.enriquecer(resposta);
   }
 
-  // Tenta buscar o CEP e devolve true/false, sem lançar. Usado pelo validador assíncrono.
+  // Tenta buscar o CEP e devolve true/false. Só vira "false" o que realmente
+  // é CEP inválido (formato errado ou não encontrado). Indisponibilidade do
+  // ViaCEP (timeout, rate limit, erro de rede/5xx) não é "CEP inválido" —
+  // relança pro validador propagar como erro do servidor (502/504), não 400.
   async cepEhValido(cep: string): Promise<boolean> {
     try {
       await this.buscarPorCep(cep);
       return true;
-    } catch {
-      return false;
+    } catch (erro) {
+      if (erro instanceof BadRequestException) {
+        return false;
+      }
+      throw erro;
     }
   }
 

@@ -72,18 +72,37 @@ export class TripsService {
     return montarPaginacao(dados, total, paginacao.page, paginacao.pageSize);
   }
 
-  async buscarPorId(id: string) {
+  // escopoDoUsuario (opcional): quando informado e o usuário não tiver
+  // TRIP_VIEW_ALL, só devolve a viagem se ela for do próprio motorista —
+  // senão 404 (mesmo retorno de "não existe", pra não revelar o registro a
+  // quem não é dono). Chamadas internas do service (criar/iniciar/etc, antes
+  // de rodar a procedure) continuam sem esse filtro, de propósito.
+  async buscarPorId(
+    id: string,
+    escopoDoUsuario?: { userId: string; temPermissaoViewAll: boolean },
+  ) {
     const viagem = await this.servicoPrisma.comSoftDelete.trip.findUnique({
       where: { id },
     });
     if (!viagem) {
       throw new NotFoundException('Trip not found');
     }
+
+    if (escopoDoUsuario && !escopoDoUsuario.temPermissaoViewAll) {
+      const driverIdProprio = await buscarDriverIdProprio(
+        this.servicoPrisma,
+        escopoDoUsuario.userId,
+      );
+      if (!driverIdProprio || viagem.driverId !== driverIdProprio) {
+        throw new NotFoundException('Trip not found');
+      }
+    }
+
     return viagem;
   }
 
-  // create_trip valida tudo (motorista, CNH, veículo, quilometragem) e já
-  // insere a viagem PLANNED reservando o veículo (IN_USE).
+  // create_trip valida motorista, CNH e veículo, e insere a viagem PLANNED reservando
+  // o veículo (IN_USE). O startKm provisório é a quilometragem do veículo.
   async criar(dados: CreateTripDto, idDoUsuario: string) {
     let idDaViagemCriada = '';
 
@@ -100,7 +119,7 @@ export class TripsService {
         await tx.$executeRaw`SELECT set_config('app.current_user_id', ${idDoUsuario}::text, true)`;
 
         const resultado = await tx.$queryRaw<Array<{ id: string; status: string }>>`
-          CALL create_trip(${dados.driverId}::uuid, ${dados.vehicleId}::uuid, ${dados.startKm}, ${enderecoInicio.fullAddress}, ${enderecoFim.fullAddress}, ${idDoUsuario}::uuid, NULL, NULL)
+          CALL create_trip(${dados.driverId}::uuid, ${dados.vehicleId}::uuid,${enderecoInicio.fullAddress}, ${enderecoFim.fullAddress}, ${idDoUsuario}::uuid, NULL, NULL)
         `;
         idDaViagemCriada = resultado[0].id;
       });
@@ -113,8 +132,13 @@ export class TripsService {
 
   // start_trip exige o vehicleId da viagem; buscamos aqui em vez de pedir no
   // DTO, para o cliente não ter que repassar um dado que a viagem já tem.
-  async iniciar(id: string, dados: StartTripDto, idDoUsuario: string) {
-    const viagem = await this.buscarPorId(id);
+  async iniciar(
+    id: string,
+    dados: StartTripDto,
+    idDoUsuario: string,
+    escopoDoUsuario?: { userId: string; temPermissaoViewAll: boolean },
+  ) {
+    const viagem = await this.buscarPorId(id, escopoDoUsuario);
 
     try {
       await this.servicoPrisma.$transaction(async (tx) => {
@@ -131,8 +155,13 @@ export class TripsService {
     return this.buscarPorId(id);
   }
 
-  async finalizar(id: string, dados: EndTripDto, idDoUsuario: string) {
-    await this.buscarPorId(id);
+  async finalizar(
+    id: string,
+    dados: EndTripDto,
+    idDoUsuario: string,
+    escopoDoUsuario?: { userId: string; temPermissaoViewAll: boolean },
+  ) {
+    await this.buscarPorId(id, escopoDoUsuario);
 
     try {
       await this.servicoPrisma.$transaction(async (tx) => {
@@ -149,8 +178,12 @@ export class TripsService {
     return this.buscarPorId(id);
   }
 
-  async cancelar(id: string, idDoUsuario: string) {
-    await this.buscarPorId(id);
+  async cancelar(
+    id: string,
+    idDoUsuario: string,
+    escopoDoUsuario?: { userId: string; temPermissaoViewAll: boolean },
+  ) {
+    await this.buscarPorId(id, escopoDoUsuario);
 
     try {
       await this.servicoPrisma.$transaction(async (tx) => {

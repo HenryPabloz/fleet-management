@@ -1,5 +1,4 @@
 import {
-  ConflictException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -12,8 +11,6 @@ import { Prisma } from '../generated/prisma/client';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { LoginWithApiKeyDto } from './dto/login-with-api-key.dto';
 import { RegenerateApiKeyResponseDto } from './dto/regenerate-api-key-response.dto';
-import { SignupResponseDto } from './dto/signup-response.dto';
-import { SignupDto } from './dto/signup.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 import { UsuarioLogado } from './interfaces/usuario-logado.interface';
 import { calcularHashApiKey, gerarApiKey } from './utils/api-key.util';
@@ -24,9 +21,6 @@ const HASH_FALSO =
 
 // Quantas vezes tenta gerar outra chave se o banco disser que ela já existe.
 const MAXIMO_TENTATIVAS_CHAVE = 3;
-
-// Todo cadastro público entra com este papel.
-const PAPEL_PADRAO = 'DRIVER';
 
 @Injectable()
 export class AuthService {
@@ -39,59 +33,6 @@ export class AuthService {
 
   generateApiKey(): string {
     return gerarApiKey();
-  }
-
-  async signup(dadosCadastro: SignupDto): Promise<SignupResponseDto> {
-    // O papel vem sempre do servidor, nunca de quem se cadastra.
-    const papel = await this.servicoPrisma.role.findUnique({
-      where: { name: PAPEL_PADRAO },
-    });
-    if (!papel) {
-      this.registro.error(
-        `Papel ${PAPEL_PADRAO} não encontrado. O seed foi executado?`,
-      );
-      throw new InternalServerErrorException();
-    }
-
-    const hashDaSenha = await bcrypt.hash(dadosCadastro.password, 10);
-
-    for (let tentativa = 1; tentativa <= MAXIMO_TENTATIVAS_CHAVE; tentativa++) {
-      const chave = this.generateApiKey();
-      try {
-        const usuario = await this.servicoPrisma.user.create({
-          data: {
-            email: dadosCadastro.email,
-            password: hashDaSenha,
-            fullName: dadosCadastro.fullName,
-            roleId: papel.id,
-            apiKey: calcularHashApiKey(chave),
-            apiKeyCreatedAt: new Date(),
-          },
-        });
-        return {
-          userId: usuario.id,
-          apiKey: chave,
-          email: usuario.email,
-          message: 'Save your API key securely',
-        };
-      } catch (erro) {
-        if (!this.ehErroDeUnicidade(erro)) {
-          throw erro;
-        }
-        // Se o e-mail já existe é conflito; senão a chave repetiu e tenta outra.
-        const emailJaExiste = await this.servicoPrisma.user.findUnique({
-          where: { email: dadosCadastro.email },
-        });
-        if (emailJaExiste) {
-          throw new ConflictException('Email already registered');
-        }
-      }
-    }
-
-    this.registro.error(
-      'Não foi possível gerar uma API key única no cadastro.',
-    );
-    throw new InternalServerErrorException();
   }
 
   async loginWithApiKey(
@@ -167,6 +108,25 @@ export class AuthService {
         role: usuario.role.name,
       },
     };
+  }
+
+  // Confere a senha do dono da chave e só então troca a chave.
+  async regenerateApiKeyComSenha(
+    userId: string,
+    senha: string,
+  ): Promise<RegenerateApiKeyResponseDto> {
+    const usuario = await this.servicoPrisma.comSoftDelete.user.findUnique({
+      where: { id: userId },
+    });
+    let hashParaComparar = HASH_FALSO;
+    if (usuario) {
+      hashParaComparar = usuario.password;
+    }
+    const senhaCorreta = await bcrypt.compare(senha, hashParaComparar);
+    if (!usuario || !senhaCorreta) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    return this.regenerateApiKey(userId);
   }
 
   async regenerateApiKey(userId: string): Promise<RegenerateApiKeyResponseDto> {

@@ -63,8 +63,18 @@ const TRIP_SCHEMA = {
     driverId: { type: 'string', format: 'uuid' },
     vehicleId: { type: 'string', format: 'uuid' },
     status: { type: 'string', enum: ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'], example: 'PLANNED' },
-    startKm: { type: 'integer', example: 15000 },
-    endKm: { type: 'integer', nullable: true, example: null },
+    startKm: {
+      type: 'integer',
+      description:
+        'Provisório (quilometragem do veículo na criação) até o `start`; depois é a leitura real do hodômetro informada no start.',
+      example: 15000,
+    },
+    endKm: {
+      type: 'integer',
+      nullable: true,
+      description: 'Leitura do hodômetro ao chegar (`endMileage`). Distância percorrida = endKm - startKm.',
+      example: null,
+    },
     startLocation: {
       type: 'string',
       description: 'Endereço resolvido pelo ViaCEP a partir do CEP enviado na criação (não é mais texto livre).',
@@ -115,6 +125,20 @@ export class TripsController {
     private servicoTrips: TripsService,
     private servicoPermissions: PermissionsService,
   ) {}
+
+  // Usado nas rotas de detalhe/transição de viagem (buscarPorId, start, end,
+  // cancel), pra saber se o usuário só pode ver/agir na própria viagem
+  // (motorista sem TRIP_VIEW_ALL) ou em qualquer uma.
+  private async resolverEscopoDoUsuario(usuario: UsuarioLogado) {
+    const codigos = await this.servicoPermissions.obterCodigosEfetivos(
+      usuario.userId,
+      usuario.roleId,
+    );
+    return {
+      userId: usuario.userId,
+      temPermissaoViewAll: codigos.includes('TRIP_VIEW_ALL'),
+    };
+  }
 
   @Get()
   @Permissions('TRIP_VIEW_OWN', 'TRIP_VIEW_ALL')
@@ -169,11 +193,11 @@ export class TripsController {
 
   // Precisa vir antes de "GET /:id", senão "deleted" seria lido como um id.
   @Get('deleted/all')
-  @Roles('ADMIN')
+  @Permissions('TRIP_RESTORE')
   @ApiOperation({
     summary: 'Lista viagens removidas (soft delete), paginado',
     description:
-      'Lista viagens já removidas logicamente (deletedAt preenchido), paginado. Acesso: ADMIN.\n\n' +
+      'Lista viagens já removidas logicamente (deletedAt preenchido), paginado. Acesso: permission `TRIP_RESTORE` (ADMIN por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `trips`.',
     ...({ 'x-database-tables': { read: ['trips'] } } as Record<string, unknown>),
   })
@@ -210,8 +234,12 @@ export class TripsController {
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  buscarPorId(@Param('id', ParseUUIDPipe) id: string) {
-    return this.servicoTrips.buscarPorId(id);
+  async buscarPorId(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() usuario: UsuarioLogado,
+  ) {
+    const escopo = await this.resolverEscopoDoUsuario(usuario);
+    return this.servicoTrips.buscarPorId(id, escopo);
   }
 
   @Post()
@@ -221,8 +249,9 @@ export class TripsController {
     summary: 'Cria uma viagem (PLANNED)',
     description:
       'Chama a procedure `create_trip`, que valida motorista (ativo, CNH válida), veículo ' +
-      '(disponível) e quilometragem inicial, e já reserva o veículo (`AVAILABLE` -> `IN_USE`). ' +
-      'A viagem nasce com status `PLANNED`. `startLocation` e `endLocation` precisam ser um ' +
+      '(disponível) e já reserva o veículo (`AVAILABLE` -> `IN_USE`). ' +
+      'A viagem nasce com status `PLANNED`, mas o veículo já fica `IN_USE` desde a criação (reservado). O cliente NÃO informa `startKm`: ' +
+      'a resposta traz `startKm` provisório = quilometragem atual do veículo, que vira a leitura real no `start`; a distância é `endKm - startKm`. `startLocation` e `endLocation` precisam ser um ' +
       '**CEP brasileiro válido** (com ou sem máscara) — não é mais texto livre. Os dois CEPs são ' +
       'validados e resolvidos contra a API real do ViaCEP antes de chamar a procedure, e o que ' +
       'fica gravado na viagem é o endereço resolvido (ex: `"São Paulo, SP"`), não o CEP em si. ' +
@@ -275,7 +304,7 @@ export class TripsController {
   @ApiOperation({
     summary: 'Inicia uma viagem (PLANNED -> IN_PROGRESS)',
     description:
-      'Chama a procedure `start_trip` com a quilometragem atual informada. Só funciona em ' +
+      'Chama a procedure `start_trip`. Recebe `currentMileage` (leitura real do hodômetro ao sair; não pode ser menor que a atual do veículo), que vira o `startKm` definitivo da viagem e a quilometragem do veículo. Só funciona em ' +
       'viagens `PLANNED`; qualquer outro status resulta em 409. Acesso: ADMIN, FLEET_MANAGER, ' +
       'DRIVER.\n\n' +
       ERROS_DE_PROCEDURE_COMUNS +
@@ -292,12 +321,13 @@ export class TripsController {
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 409, description: 'Viagem não está em status PLANNED.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  iniciar(
+  async iniciar(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dados: StartTripDto,
     @CurrentUser() usuario: UsuarioLogado,
   ) {
-    return this.servicoTrips.iniciar(id, dados, usuario.userId);
+    const escopo = await this.resolverEscopoDoUsuario(usuario);
+    return this.servicoTrips.iniciar(id, dados, usuario.userId, escopo);
   }
 
   @Patch(':id/end')
@@ -306,7 +336,7 @@ export class TripsController {
   @ApiOperation({
     summary: 'Finaliza uma viagem (IN_PROGRESS -> COMPLETED)',
     description:
-      'Chama a procedure `end_trip` com a quilometragem final e o local de chegada. Só funciona ' +
+      'Chama a procedure `end_trip` com `endMileage` (hodômetro ao chegar; não menor que `startKm` nem que a atual do veículo) e `endLocation` (texto livre). Distância percorrida = `endMileage - startKm`; a quilometragem do veículo passa a ser `endMileage` e ele volta a AVAILABLE. Só funciona ' +
       'em viagens `IN_PROGRESS`; qualquer outro status resulta em 409. Acesso: ADMIN, ' +
       'FLEET_MANAGER, DRIVER.\n\n' +
       ERROS_DE_PROCEDURE_COMUNS +
@@ -323,12 +353,13 @@ export class TripsController {
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 409, description: 'Viagem não está em status IN_PROGRESS.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  finalizar(
+  async finalizar(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dados: EndTripDto,
     @CurrentUser() usuario: UsuarioLogado,
   ) {
-    return this.servicoTrips.finalizar(id, dados, usuario.userId);
+    const escopo = await this.resolverEscopoDoUsuario(usuario);
+    return this.servicoTrips.finalizar(id, dados, usuario.userId, escopo);
   }
 
   @Patch(':id/cancel')
@@ -352,12 +383,13 @@ export class TripsController {
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 409, description: 'Viagem já está em status COMPLETED ou CANCELLED.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  cancelar(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() usuario: UsuarioLogado) {
-    return this.servicoTrips.cancelar(id, usuario.userId);
+  async cancelar(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() usuario: UsuarioLogado) {
+    const escopo = await this.resolverEscopoDoUsuario(usuario);
+    return this.servicoTrips.cancelar(id, usuario.userId, escopo);
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Permissions('TRIP_DELETE')
   @HttpCode(204)
   @ApiOperation({
     summary: 'Remove uma viagem (soft delete)',
@@ -366,7 +398,7 @@ export class TripsController {
       '`PATCH /trips/:id/restore`. Só funciona em viagens já `COMPLETED`/`CANCELLED` — uma ' +
       'viagem `PLANNED`/`IN_PROGRESS` não pode ser removida direto (isso deixaria o veículo ' +
       'preso em `IN_USE` sem viagem ativa de verdade); cancele com ' +
-      '`PATCH /trips/:id/cancel` primeiro. Acesso: ADMIN.\n\n' +
+      '`PATCH /trips/:id/cancel` primeiro. Acesso: permission `TRIP_DELETE` (ADMIN por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `trips`; escreve em `trips`.',
     ...({
       'x-database-tables': { read: ['trips'], write: ['trips'] },
@@ -384,12 +416,12 @@ export class TripsController {
   }
 
   @Patch(':id/restore')
-  @Roles('ADMIN')
+  @Permissions('TRIP_RESTORE')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Restaura uma viagem removida',
     description:
-      'Limpa `deletedAt`, revertendo o soft delete. Acesso: ADMIN.\n\n' +
+      'Limpa `deletedAt`, revertendo o soft delete. Acesso: permission `TRIP_RESTORE` (ADMIN por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `trips`; escreve em `trips`.',
     ...({
       'x-database-tables': { read: ['trips'], write: ['trips'] },

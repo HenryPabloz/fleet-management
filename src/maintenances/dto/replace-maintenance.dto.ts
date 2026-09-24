@@ -1,3 +1,4 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   IsIn,
@@ -19,16 +20,20 @@ const STATUS_ACEITOS = ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED'] as const;
 // o vínculo é fixo após criado.
 export class ReplaceMaintenanceDto {
   @IsIn(TIPOS_ACEITOS)
+  @ApiProperty({ description: "Tipo da manutenção.", example: "PREVENTIVE", enum: ['PREVENTIVE', 'CORRECTIVE', 'INSPECTION'] })
   type!: (typeof TIPOS_ACEITOS)[number];
 
   @IsIn(STATUS_ACEITOS)
+  @ApiProperty({ description: "Status.", example: "COMPLETED", enum: ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED'] })
   status!: (typeof STATUS_ACEITOS)[number];
 
   @IsISO8601()
+  @ApiProperty({ description: "Data agendada (ISO 8601).", example: "2026-10-15" })
   scheduledDate!: string;
 
   @IsOptional()
   @IsISO8601()
+  @ApiPropertyOptional({ description: "Data de conclusão (ISO 8601); só faz sentido quando termina.", example: "2026-10-16" })
   completedDate?: string;
 
   @Transform(({ value }) => {
@@ -40,10 +45,12 @@ export class ReplaceMaintenanceDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(1000)
+  @ApiProperty({ description: "Descrição do serviço.", example: "Revisão completa concluída" })
   description!: string;
 
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @Max(100000000)
+  @ApiProperty({ description: "Custo em reais.", example: 780.9 })
   cost!: number;
 }

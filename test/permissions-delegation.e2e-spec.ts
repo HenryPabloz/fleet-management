@@ -7,6 +7,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/database/prisma.service';
+import { dataFutura, novaCnh } from './helpers/usuarios-e2e';
 
 const SENHA = 'SenhaForte123';
 
@@ -49,29 +50,31 @@ describe('Delegação granular de permissões (UserPermission) (e2e)', () => {
       .set('Authorization', `Bearer ${token}`);
   }
 
-  // /auth/signup sempre cria DRIVER; quando o papel pedido for outro, ajusta
-  // via PATCH (ADMIN) depois. A x-api-key devolvida no signup é a do próprio
-  // usuário (POST /users, feito por ADMIN, não devolve apiKey por segurança).
-  async function criarUsuarioELogar(roleId: string, nome: string) {
-    const email = novoEmail();
-    const cadastro = await request(app.getHttpServer())
-      .post('/auth/signup')
-      .send({ email, password: SENHA, fullName: nome })
-      .expect(201);
-    const id = cadastro.body.userId as string;
-    const chave = cadastro.body.apiKey as string;
-    idsDeUsuarioParaLimpar.push(id);
-
-    if (roleId !== roleIdDriver) {
-      await autenticado('patch', `/users/${id}`, tokenAdmin)
-        .send({ roleId })
-        .expect(200);
+  // Corpo de POST /users: DRIVER sempre leva o bloco driver.
+  function corpoDeUsuario(roleId: string, nome: string) {
+    const corpo: Record<string, unknown> = {
+      email: novoEmail(),
+      password: SENHA,
+      fullName: nome,
+      roleId,
+    };
+    if (roleId === roleIdDriver) {
+      corpo.driver = { licenseNumber: novaCnh(), licenseExpiry: dataFutura() };
     }
+    return corpo;
+  }
+
+  // O ADMIN cria o usuário por POST /users e loga com a apiKey devolvida.
+  async function criarUsuarioELogar(roleId: string, nome: string) {
+    const corpo = corpoDeUsuario(roleId, nome);
+    const cadastro = await autenticado('post', '/users', tokenAdmin).send(corpo).expect(201);
+    const id = cadastro.body.id as string;
+    idsDeUsuarioParaLimpar.push(id);
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .set('x-api-key', chave)
-      .send({ email, password: SENHA })
+      .set('x-api-key', cadastro.body.apiKey)
+      .send({ email: corpo.email, password: SENHA })
       .expect(200);
 
     return { id, token: login.body.accessToken as string };
@@ -167,7 +170,7 @@ describe('Delegação granular de permissões (UserPermission) (e2e)', () => {
   it('GET /permissions (ADMIN) lista o catálogo completo', async () => {
     const resposta = await autenticado('get', '/permissions', tokenAdmin).expect(200);
     const codigos = resposta.body.map((item: { code: string }) => item.code);
-    expect(codigos).toEqual(expect.arrayContaining(['USER_CREATE', 'USER_UPDATE', 'USER_DELETE']));
+    expect(codigos).toEqual(expect.arrayContaining(['USER_VIEW', 'USER_CREATE', 'USER_UPDATE', 'USER_DELETE', 'USER_ROLE_PROMOTE', 'USER_ROLE_DEMOTE']));
   });
 
   it('GET /permissions sem ser ADMIN dá 403', async () => {
@@ -176,51 +179,55 @@ describe('Delegação granular de permissões (UserPermission) (e2e)', () => {
   });
 
   describe('FLEET_MANAGER sem concessão nenhuma', () => {
-    it('POST /users dá 403 (sem USER_CREATE)', async () => {
+    it('GET /users dá 403 (sem USER_VIEW)', async () => {
       const fleetManager = await criarUsuarioELogar(roleIdFleetManager, 'FM Sem Permissao');
-      await autenticado('post', '/users', fleetManager.token)
-        .send({ email: novoEmail(), password: SENHA, fullName: 'X', roleId: roleIdDriver })
-        .expect(403);
+      await autenticado('get', '/users', fleetManager.token).expect(403);
+    });
+
+    it('POST /users cria DRIVER (201): USER_CREATE já vem no papel', async () => {
+      const fleetManager = await criarUsuarioELogar(roleIdFleetManager, 'FM Cria Driver');
+      const resposta = await autenticado('post', '/users', fleetManager.token)
+        .send(corpoDeUsuario(roleIdDriver, 'Criado Pelo Gerente'))
+        .expect(201);
+      idsDeUsuarioParaLimpar.push(resposta.body.id);
     });
   });
 
-  describe('Ciclo completo: conceder USER_CREATE a um FLEET_MANAGER e revogar', () => {
+  describe('Ciclo completo: conceder USER_VIEW a um FLEET_MANAGER e revogar', () => {
     let fleetManager: { id: string; token: string };
 
     beforeAll(async () => {
       fleetManager = await criarUsuarioELogar(roleIdFleetManager, 'FM Ciclo Delegacao');
     });
 
-    it('GET /users/:id/permissions mostra fromRole vazio de USER_CREATE e individual vazio', async () => {
+    it('GET /users/:id/permissions mostra fromRole sem USER_VIEW e individual vazio', async () => {
       const resposta = await autenticado(
         'get',
         `/users/${fleetManager.id}/permissions`,
         tokenAdmin,
       ).expect(200);
-      expect(resposta.body.fromRole).not.toContain('USER_CREATE');
+      expect(resposta.body.fromRole).not.toContain('USER_VIEW');
       expect(resposta.body.individual).toEqual([]);
     });
 
-    it('POST /users como FLEET_MANAGER sem concessão dá 403', async () => {
-      await autenticado('post', '/users', fleetManager.token)
-        .send({ email: novoEmail(), password: SENHA, fullName: 'X', roleId: roleIdDriver })
-        .expect(403);
+    it('GET /users como FLEET_MANAGER sem concessão dá 403', async () => {
+      await autenticado('get', '/users', fleetManager.token).expect(403);
     });
 
-    it('POST /users/:id/permissions concede USER_CREATE (ADMIN)', async () => {
+    it('POST /users/:id/permissions concede USER_VIEW (ADMIN)', async () => {
       const resposta = await autenticado(
         'post',
         `/users/${fleetManager.id}/permissions`,
         tokenAdmin,
       )
-        .send({ permissionCode: 'USER_CREATE' })
+        .send({ permissionCode: 'USER_VIEW' })
         .expect(200);
-      expect(resposta.body.individual).toContain('USER_CREATE');
+      expect(resposta.body.individual).toContain('USER_VIEW');
     });
 
     it('POST /users/:id/permissions de novo é idempotente (ainda 200, sem duplicar)', async () => {
       await autenticado('post', `/users/${fleetManager.id}/permissions`, tokenAdmin)
-        .send({ permissionCode: 'USER_CREATE' })
+        .send({ permissionCode: 'USER_VIEW' })
         .expect(200);
 
       const linhas = await prisma.userPermission.findMany({
@@ -235,21 +242,19 @@ describe('Delegação granular de permissões (UserPermission) (e2e)', () => {
         .expect(400);
     });
 
-    it('agora o FLEET_MANAGER consegue POST /users (201)', async () => {
-      const resposta = await autenticado('post', '/users', fleetManager.token)
-        .send({ email: novoEmail(), password: SENHA, fullName: 'Criado Via Delegacao', roleId: roleIdDriver })
-        .expect(201);
-      idsDeUsuarioParaLimpar.push(resposta.body.id);
+    it('agora o FLEET_MANAGER consegue GET /users e GET /users/:id (200)', async () => {
+      await autenticado('get', '/users', fleetManager.token).expect(200);
+      await autenticado('get', `/users/${fleetManager.id}`, fleetManager.token).expect(200);
     });
 
-    it('DELETE /users/:id/permanent continua 403 pro FLEET_MANAGER mesmo com USER_CREATE concedido', async () => {
+    it('DELETE /users/:id/permanent continua 403 pro FLEET_MANAGER mesmo com USER_VIEW concedido', async () => {
       await autenticado('delete', `/users/${fleetManager.id}/permanent`, fleetManager.token).expect(403);
     });
 
     it('DELETE /users/:id/permissions/USER_CREATE revoga (ADMIN)', async () => {
       await autenticado(
         'delete',
-        `/users/${fleetManager.id}/permissions/USER_CREATE`,
+        `/users/${fleetManager.id}/permissions/USER_VIEW`,
         tokenAdmin,
       ).expect(204);
     });
@@ -257,15 +262,13 @@ describe('Delegação granular de permissões (UserPermission) (e2e)', () => {
     it('DELETE de novo (já revogado) continua 204 (idempotente)', async () => {
       await autenticado(
         'delete',
-        `/users/${fleetManager.id}/permissions/USER_CREATE`,
+        `/users/${fleetManager.id}/permissions/USER_VIEW`,
         tokenAdmin,
       ).expect(204);
     });
 
-    it('volta a dar 403 em POST /users pro mesmo FLEET_MANAGER', async () => {
-      await autenticado('post', '/users', fleetManager.token)
-        .send({ email: novoEmail(), password: SENHA, fullName: 'X', roleId: roleIdDriver })
-        .expect(403);
+    it('volta a dar 403 em GET /users pro mesmo FLEET_MANAGER', async () => {
+      await autenticado('get', '/users', fleetManager.token).expect(403);
     });
   });
 
@@ -277,15 +280,18 @@ describe('Delegação granular de permissões (UserPermission) (e2e)', () => {
     it('DELETE /users/:id/permanent dá 403 pro FLEET_MANAGER mesmo com USER_DELETE concedido', async () => {
       const fleetManager = await criarUsuarioELogar(roleIdFleetManager, 'FM USER_DELETE Hard Delete');
       const alvo = await autenticado('post', '/users', tokenAdmin)
-        .send({ email: novoEmail(), password: SENHA, fullName: 'Alvo Hard Delete', roleId: roleIdDriver })
+        .send(corpoDeUsuario(roleIdDriver, 'Alvo Hard Delete'))
         .expect(201);
       idsDeUsuarioParaLimpar.push(alvo.body.id);
 
       await autenticado('post', `/users/${fleetManager.id}/permissions`, tokenAdmin)
         .send({ permissionCode: 'USER_DELETE' })
         .expect(200);
+      await autenticado('post', `/users/${fleetManager.id}/permissions`, tokenAdmin)
+        .send({ permissionCode: 'USER_RESTORE' })
+        .expect(200);
 
-      // Com USER_DELETE, o soft delete funciona normalmente...
+      // Com USER_DELETE e USER_RESTORE, soft delete e restore funcionam...
       await autenticado('delete', `/users/${alvo.body.id}`, fleetManager.token).expect(204);
       await autenticado('patch', `/users/${alvo.body.id}/restore`, fleetManager.token).expect(200);
 
@@ -416,7 +422,7 @@ describe('Delegação granular de permissões (UserPermission) (e2e)', () => {
 
   it('ADMIN continua funcionando normalmente em tudo (papel já cobre, sem precisar de concessão)', async () => {
     const resposta = await autenticado('post', '/users', tokenAdmin)
-      .send({ email: novoEmail(), password: SENHA, fullName: 'Criado Por Admin', roleId: roleIdDriver })
+      .send(corpoDeUsuario(roleIdDriver, 'Criado Por Admin'))
       .expect(201);
     idsDeUsuarioParaLimpar.push(resposta.body.id);
 

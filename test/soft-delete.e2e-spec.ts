@@ -7,6 +7,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/database/prisma.service';
+import { dataFutura as dataFuturaIso } from './helpers/usuarios-e2e';
 
 const SENHA = 'SenhaForte123';
 
@@ -17,6 +18,7 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
   let prisma: PrismaService;
   let tokenAdmin: string;
   let roleIdDriver: string;
+  let roleIdGerente: string;
 
   // Só estes ids são apagados de verdade no fim (limpeza do próprio teste).
   const idsDeUsuarioParaLimpar: string[] = [];
@@ -85,6 +87,8 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
       throw new Error('Papel DRIVER não encontrado. O seed foi executado?');
     }
     roleIdDriver = papelDriver.id;
+    const papelGerente = await prisma.role.findUnique({ where: { name: 'FLEET_MANAGER' } });
+    roleIdGerente = papelGerente?.id as string;
   });
 
   afterAll(async () => {
@@ -111,14 +115,15 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
           email: novoEmail(),
           password: SENHA,
           fullName: 'Usuario Teste Soft Delete',
-          roleId: roleIdDriver,
+          roleId: roleIdGerente,
         })
         .expect(201);
 
       idUsuario = resposta.body.id;
       idsDeUsuarioParaLimpar.push(idUsuario);
       expect(resposta.body.password).toBeUndefined();
-      expect(resposta.body.apiKey).toBeUndefined();
+      // POST /users devolve a apiKey em texto uma única vez.
+      expect(typeof resposta.body.apiKey).toBe('string');
     });
 
     it('GET /users lista o usuário criado (paginado)', async () => {
@@ -199,26 +204,20 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
           password: SENHA,
           fullName: 'Motorista Teste Soft Delete',
           roleId: roleIdDriver,
+          driver: { licenseNumber: novaCnh(), licenseExpiry: dataFuturaIso() },
         })
         .expect(201);
       idUsuarioDoDriver = resposta.body.id;
       idsDeUsuarioParaLimpar.push(idUsuarioDoDriver);
+      idDriver = resposta.body.driver.id;
     });
 
-    it('POST /drivers cria um motorista ativo', async () => {
-      const dataFutura = new Date();
-      dataFutura.setFullYear(dataFutura.getFullYear() + 1);
+    it('POST /users (DRIVER + bloco driver) cria o motorista ativo e POST /drivers não existe mais', async () => {
+      const noBanco = await prisma.driver.findUnique({ where: { id: idDriver } });
+      expect(noBanco?.userId).toEqual(idUsuarioDoDriver);
+      expect(noBanco?.isActive).toBe(true);
 
-      const resposta = await autenticado('post', '/drivers')
-        .send({
-          userId: idUsuarioDoDriver,
-          licenseNumber: novaCnh(),
-          licenseExpiry: dataFutura.toISOString(),
-        })
-        .expect(201);
-
-      idDriver = resposta.body.id;
-      expect(resposta.body.userId).toEqual(idUsuarioDoDriver);
+      await autenticado('post', '/drivers').send({}).expect(404);
     });
 
     it('GET /drivers lista o motorista criado (paginado)', async () => {
@@ -282,21 +281,12 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
           password: SENHA,
           fullName: 'Usuario Teste Correcoes QA',
           roleId: roleIdDriver,
+          driver: { licenseNumber: novaCnh(), licenseExpiry: dataFuturaIso() },
         })
         .expect(201);
       idUsuario = resposta.body.id;
       idsDeUsuarioParaLimpar.push(idUsuario);
-
-      const dataFutura = new Date();
-      dataFutura.setFullYear(dataFutura.getFullYear() + 1);
-      const respostaDriver = await autenticado('post', '/drivers')
-        .send({
-          userId: idUsuario,
-          licenseNumber: novaCnh(),
-          licenseExpiry: dataFutura.toISOString(),
-        })
-        .expect(201);
-      idDriver = respostaDriver.body.id;
+      idDriver = resposta.body.driver.id;
     });
 
     it('DELETE /users/:id faz soft delete e propaga pro Driver vinculado', async () => {
@@ -356,7 +346,7 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
           email: novoEmail(),
           password: SENHA,
           fullName: 'Usuario Teste Historico Trip',
-          roleId: roleIdDriver,
+          roleId: roleIdGerente,
         })
         .expect(201);
       const idUsuarioCriador = usuarioCriador.body.id;
@@ -368,20 +358,12 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
           password: SENHA,
           fullName: 'Motorista Teste Historico Trip',
           roleId: roleIdDriver,
+          driver: { licenseNumber: novaCnh(), licenseExpiry: dataFuturaIso() },
         })
         .expect(201);
       const idUsuarioMotorista = usuarioMotorista.body.id;
       idsDeUsuarioParaLimpar.push(idUsuarioMotorista);
-
-      const dataFutura = new Date();
-      dataFutura.setFullYear(dataFutura.getFullYear() + 1);
-      const driver = await autenticado('post', '/drivers')
-        .send({
-          userId: idUsuarioMotorista,
-          licenseNumber: novaCnh(),
-          licenseExpiry: dataFutura.toISOString(),
-        })
-        .expect(201);
+      const driver = { body: usuarioMotorista.body.driver };
 
       const veiculo = await prisma.vehicle.create({
         data: {
@@ -435,12 +417,11 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
 
     beforeAll(async () => {
       email = novoEmail();
-      const cadastro = await request(app.getHttpServer())
-        .post('/auth/signup')
-        .send({ email, password: SENHA, fullName: 'Usuario Teste Auth Revoke' })
+      const cadastro = await autenticado('post', '/users')
+        .send({ email, password: SENHA, fullName: 'Usuario Teste Auth Revoke', roleId: roleIdGerente })
         .expect(201);
       apiKey = cadastro.body.apiKey;
-      idUsuario = cadastro.body.userId;
+      idUsuario = cadastro.body.id;
       idsDeUsuarioParaLimpar.push(idUsuario);
 
       const login = await request(app.getHttpServer())

@@ -1,3 +1,4 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   IsIn,
@@ -18,17 +19,21 @@ const STATUS_ACEITOS = ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED'] as const;
 export class CreateMaintenanceDto {
   // Vínculo fixo com o veículo; precisa existir e não estar soft-deletado.
   @IsUUID()
+  @ApiProperty({ description: "Id do veículo (UUID). Precisa existir e não estar removido.", example: "9f8e7d6c-5b4a-4c2d-8e0f-a1b2c3d4e5f6" })
   vehicleId!: string;
 
   @IsIn(TIPOS_ACEITOS)
+  @ApiProperty({ description: "Tipo da manutenção.", example: "PREVENTIVE", enum: ['PREVENTIVE', 'CORRECTIVE', 'INSPECTION'] })
   type!: (typeof TIPOS_ACEITOS)[number];
 
   @IsOptional()
   @IsIn(STATUS_ACEITOS)
+  @ApiPropertyOptional({ description: "Status. Padrão: SCHEDULED.", example: "SCHEDULED", enum: ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED'] })
   status?: (typeof STATUS_ACEITOS)[number];
 
   // IsISO8601 aceita data pura ou com hora, fica mais flexível.
   @IsISO8601()
+  @ApiProperty({ description: "Data agendada (ISO 8601, data ou data e hora).", example: "2026-10-15" })
   scheduledDate!: string;
 
   @Transform(({ value }) => {
@@ -40,10 +45,12 @@ export class CreateMaintenanceDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(1000)
+  @ApiProperty({ description: "Descrição do serviço (até 1000 caracteres).", example: "Revisão dos 15.000 km: óleo, filtros e freios" })
   description!: string;
 
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @Max(100000000)
+  @ApiProperty({ description: "Custo em reais (até 2 casas decimais).", example: 450.5 })
   cost!: number;
 }

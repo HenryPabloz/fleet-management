@@ -9,6 +9,7 @@ import { join } from 'path';
 import request from 'supertest';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/database/prisma.service';
+import { dataFutura as dataFuturaIso } from './helpers/usuarios-e2e';
 import { ViaCepService } from './../src/external/viacep/via-cep.service';
 import { garantirPastaDeUploads } from './../src/incidents/utils/upload-incidents.config';
 
@@ -90,19 +91,12 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
         password: SENHA,
         fullName: 'Motorista Teste Trip',
         roleId: roleIdDriver,
+        driver: { licenseNumber: novaCnh(), licenseExpiry: dataFuturaIso() },
       })
       .expect(201);
     idsDeUsuarioParaLimpar.push(usuario.body.id);
 
-    const dataFutura = new Date();
-    dataFutura.setFullYear(dataFutura.getFullYear() + 1);
-    const driver = await autenticado(tokenAdmin, 'post', '/drivers')
-      .send({
-        userId: usuario.body.id,
-        licenseNumber: novaCnh(),
-        licenseExpiry: dataFutura.toISOString(),
-      })
-      .expect(201);
+    const driver = { body: { ...usuario.body.driver, userId: usuario.body.id } };
     idsDeDriverParaLimpar.push(driver.body.id);
 
     return driver.body;
@@ -189,13 +183,13 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
         .send({
           driverId: driver.id,
           vehicleId: veiculo.id,
-          startKm: 10000,
           startLocation: '01310-100',
           endLocation: '20040-020',
         })
         .expect(201);
       idsDeTripParaLimpar.push(trip.body.id);
       expect(trip.body.status).toEqual('PLANNED');
+      expect(trip.body.startKm).toEqual(10000);
 
       let veiculoNoBanco = await prisma.vehicle.findUnique({ where: { id: veiculo.id } });
       expect(veiculoNoBanco?.status).toEqual('IN_USE');
@@ -205,6 +199,7 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
         .send({ currentMileage: 10050 })
         .expect(200);
       expect(tripIniciada.body.status).toEqual('IN_PROGRESS');
+      expect(tripIniciada.body.startKm).toEqual(10050);
 
       // 3. POST /refuelings durante a viagem
       const refueling = await autenticado(tokenAdmin, 'post', '/refuelings')
@@ -273,7 +268,6 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
         .send({
           driverId: driver.id,
           vehicleId: veiculo.id,
-          startKm: veiculo.currentMileage,
           startLocation: '30130-010',
           endLocation: '01310-100',
         })
@@ -297,7 +291,6 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
         .send({
           driverId: driver.id,
           vehicleId: veiculo.id,
-          startKm: veiculo.currentMileage,
           startLocation: '20040-020',
           endLocation: '30130-010',
         })
@@ -324,7 +317,6 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
         .send({
           driverId: driver.id,
           vehicleId: veiculo.id,
-          startKm: veiculo.currentMileage,
           startLocation: '01310-100',
           endLocation: '30130-010',
         })
@@ -342,13 +334,63 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
       expect(veiculoNoBanco?.status).toEqual('AVAILABLE');
     });
 
+    it('POST /trips com startKm dá 400 (campo removido)', async () => {
+      const veiculo = await criarVeiculo();
+      const driver = await criarMotorista();
+      await autenticado(tokenAdmin, 'post', '/trips')
+        .send({
+          driverId: driver.id,
+          vehicleId: veiculo.id,
+          startKm: veiculo.currentMileage,
+          startLocation: '01310-100',
+          endLocation: '20040-020',
+        })
+        .expect(400);
+    });
+
+    it('start com leitura maior atualiza startKm da viagem e a quilometragem do veículo', async () => {
+      const veiculo = await criarVeiculo({ currentMileage: 5000 });
+      const driver = await criarMotorista();
+      const trip = await autenticado(tokenAdmin, 'post', '/trips')
+        .send({ driverId: driver.id, vehicleId: veiculo.id, startLocation: '01310-100', endLocation: '20040-020' })
+        .expect(201);
+      idsDeTripParaLimpar.push(trip.body.id);
+      expect(trip.body.startKm).toEqual(5000);
+
+      const iniciada = await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/start`)
+        .send({ currentMileage: 5120 })
+        .expect(200);
+      expect(iniciada.body.startKm).toEqual(5120);
+      const veiculoNoBanco = await prisma.vehicle.findUnique({ where: { id: veiculo.id } });
+      expect(veiculoNoBanco?.currentMileage).toEqual(5120);
+
+      // end com km menor que o startKm é rejeitado
+      await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/end`)
+        .send({ endMileage: 5000, endLocation: 'Destino' })
+        .expect(400);
+      await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/cancel`).expect(200);
+    });
+
+    it('start com leitura menor que a quilometragem do veículo é rejeitado', async () => {
+      const veiculo = await criarVeiculo({ currentMileage: 5000 });
+      const driver = await criarMotorista();
+      const trip = await autenticado(tokenAdmin, 'post', '/trips')
+        .send({ driverId: driver.id, vehicleId: veiculo.id, startLocation: '01310-100', endLocation: '20040-020' })
+        .expect(201);
+      idsDeTripParaLimpar.push(trip.body.id);
+
+      await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/start`)
+        .send({ currentMileage: 4000 })
+        .expect(409);
+      await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/cancel`).expect(200);
+    });
+
     it('POST /trips com veículo inexistente traduz erro da procedure (404)', async () => {
       const driver = await criarMotorista();
       await autenticado(tokenAdmin, 'post', '/trips')
         .send({
           driverId: driver.id,
           vehicleId: '00000000-0000-0000-0000-000000000000',
-          startKm: 0,
           startLocation: '01310-100',
           endLocation: '20040-020',
         })
@@ -450,7 +492,6 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
         .send({
           driverId: driverA.id,
           vehicleId: veiculoA.id,
-          startKm: veiculoA.currentMileage,
           startLocation: '01310-100',
           endLocation: '20040-020',
         })
@@ -461,7 +502,6 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
         .send({
           driverId: driverB.id,
           vehicleId: veiculoB.id,
-          startKm: veiculoB.currentMileage,
           startLocation: '20040-020',
           endLocation: '01310-100',
         })
@@ -589,18 +629,19 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
     });
 
     it('driver com papel DRIVER mas sem Driver vinculado recebe lista vazia (não erro)', async () => {
-      const usuarioSemDriver = await autenticado(tokenAdmin, 'post', '/users')
-        .send({
+      // A API não cria mais DRIVER sem perfil; o banco direto simula um caso legado.
+      const usuarioSemDriver = await prisma.user.create({
+        data: {
           email: novoEmail(),
-          password: SENHA,
+          password: 'hash-de-teste-nao-usado-para-login',
           fullName: 'Usuario Sem Driver Vinculado',
           roleId: roleIdDriver,
-        })
-        .expect(201);
-      idsDeUsuarioParaLimpar.push(usuarioSemDriver.body.id);
+        },
+      });
+      idsDeUsuarioParaLimpar.push(usuarioSemDriver.id);
       const token = servicoJwt.sign({
-        sub: usuarioSemDriver.body.id,
-        email: usuarioSemDriver.body.email,
+        sub: usuarioSemDriver.id,
+        email: usuarioSemDriver.email,
         roleId: roleIdDriver,
       });
 
@@ -653,7 +694,6 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
         .send({
           driverId: driver.id,
           vehicleId: veiculo.id,
-          startKm: veiculo.currentMileage,
           startLocation: '01310-100',
           endLocation: '30130-010',
         })
@@ -676,7 +716,6 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
         .send({
           driverId: driver.id,
           vehicleId: veiculo.id,
-          startKm: veiculo.currentMileage,
           startLocation: '00000-000',
           endLocation: '20040-020',
         })

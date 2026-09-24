@@ -8,6 +8,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/database/prisma.service';
+import { dataFutura as dataFuturaIso } from './helpers/usuarios-e2e';
 
 const SENHA = 'SenhaForte123';
 
@@ -78,19 +79,12 @@ describe('Analytics (e2e)', () => {
         password: SENHA,
         fullName: 'Motorista Teste Analytics',
         roleId: roleIdDriver,
+        driver: { licenseNumber: novaCnh(), licenseExpiry: dataFuturaIso() },
       })
       .expect(201);
     idsDeUsuarioParaLimpar.push(usuario.body.id);
 
-    const dataFutura = new Date();
-    dataFutura.setFullYear(dataFutura.getFullYear() + 1);
-    const driver = await autenticado(tokenAdmin, 'post', '/drivers')
-      .send({
-        userId: usuario.body.id,
-        licenseNumber: novaCnh(),
-        licenseExpiry: dataFutura.toISOString(),
-      })
-      .expect(201);
+    const driver = { body: { ...usuario.body.driver, userId: usuario.body.id } };
     idsDeDriverParaLimpar.push(driver.body.id);
 
     return driver.body;
@@ -107,7 +101,6 @@ describe('Analytics (e2e)', () => {
       .send({
         driverId,
         vehicleId,
-        startKm,
         startLocation: '01310-100',
         endLocation: '20040-020',
       })
@@ -192,6 +185,7 @@ describe('Analytics (e2e)', () => {
         password: SENHA,
         fullName: 'Motorista RBAC Analytics',
         roleId: roleIdDriver,
+        driver: { licenseNumber: novaCnh(), licenseExpiry: dataFuturaIso() },
       })
       .expect(201);
     idsDeUsuarioParaLimpar.push(usuarioDriver.body.id);

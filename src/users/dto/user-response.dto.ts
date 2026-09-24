@@ -53,3 +53,34 @@ export class UserRemovidoRespostaDto extends UserRespostaDto {
   })
   deletedAt: string;
 }
+
+// Perfil de motorista devolvido junto do usuário (POST /users e PATCH /users/:id/role).
+export class MotoristaResumoDto {
+  @ApiProperty({ description: 'Identificador do motorista (UUID).', example: 'c4d5e6f7-1a2b-4c3d-8e9f-0a1b2c3d4e5f' })
+  id: string;
+
+  @ApiProperty({ description: 'Número da CNH.', example: '12345678900' })
+  licenseNumber: string;
+
+  @ApiProperty({ description: 'Validade da CNH.', example: '2030-08-30T00:00:00.000Z' })
+  licenseExpiry: string;
+
+  @ApiProperty({ description: 'Se o motorista está ativo.', example: true })
+  isActive: boolean;
+}
+
+// Usuário + perfil de motorista (só aparece quando existe).
+export class UserComMotoristaRespostaDto extends UserRespostaDto {
+  @ApiProperty({ required: false, type: () => MotoristaResumoDto, description: 'Perfil de motorista, quando houver.' })
+  driver?: MotoristaResumoDto;
+}
+
+// Resposta de POST /users: inclui a API key em texto, mostrada uma única vez.
+export class UserCriadoRespostaDto extends UserComMotoristaRespostaDto {
+  @ApiProperty({
+    description:
+      'API key em texto (64 hex). Aparece SÓ nesta resposta: o banco guarda apenas o hash. Guarde e entregue ao usuário.',
+    example: '9f2c4b7a1d0e8c3f5a6b2d9e7c1f4a8b3e6d0c5f9a2b7e1d4c8f3a6b0e5d9c21',
+  })
+  apiKey: string;
+}

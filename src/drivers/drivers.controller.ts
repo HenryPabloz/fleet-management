@@ -7,7 +7,6 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
-  Post,
   Put,
   Query,
   UseGuards,
@@ -30,7 +29,6 @@ import { Permissions } from '../auth/decorators/permissions.decorator';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
 import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
-import { CreateDriverDto } from './dto/create-driver.dto';
 import { DriverRespostaDto } from './dto/driver-response.dto';
 import { ReplaceDriverDto } from './dto/replace-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
@@ -53,8 +51,8 @@ const QUERY_PAGE_SIZE = {
 };
 
 // Leitura: quem tiver DRIVER_VIEW (ADMIN por papel; FLEET_MANAGER por papel
-// desde a matriz de delegação). Escrita: quem tiver DRIVER_CREATE/DRIVER_UPDATE
-// (ADMIN e FLEET_MANAGER por papel; outros papéis podem receber via delegação).
+// desde a matriz de delegação). Escrita: quem tiver DRIVER_UPDATE etc.
+// O motorista nasce só em POST /users (papel DRIVER + bloco driver).
 @ApiTags('drivers')
 @ApiBearerAuth('jwt')
 @ApiExtraModels(ProblemDetailsDto, PaginacaoMetadataDto, DriverRespostaDto)
@@ -96,11 +94,11 @@ export class DriversController {
 
   // Precisa vir antes de "GET /:id", senão "deleted" seria lido como um id.
   @Get('deleted/all')
-  @Roles('ADMIN')
+  @Permissions('DRIVER_RESTORE')
   @ApiOperation({
     summary: 'Lista motoristas removidos (soft delete), paginado',
     description:
-      'Lista motoristas já removidos logicamente (deletedAt preenchido), paginado. Acesso: ADMIN.\n\n' +
+      'Lista motoristas já removidos logicamente (deletedAt preenchido), paginado. Acesso: permission `DRIVER_RESTORE` (ADMIN por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `drivers`.',
     ...({ 'x-database-tables': { read: ['drivers'] } } as Record<string, unknown>),
   })
@@ -146,37 +144,6 @@ export class DriversController {
   @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   buscarPorId(@Param('id', ParseUUIDPipe) id: string) {
     return this.servicoDrivers.buscarPorId(id);
-  }
-
-  @Post()
-  @Permissions('DRIVER_CREATE')
-  @HttpCode(201)
-  @ApiOperation({
-    summary: 'Cria um motorista',
-    description:
-      'Vincula um `User` já existente (não removido) como motorista. Um usuário só pode ter ' +
-      'um motorista, e o número da CNH é único. Acesso: ADMIN, FLEET_MANAGER (via permissão DRIVER_CREATE).\n\n' +
-      '`x-database-tables`: lê `users` (valida userId), `drivers` (checa vínculo e CNH duplicados); escreve em `drivers`.',
-    ...({
-      'x-database-tables': { read: ['users', 'drivers'], write: ['drivers'] },
-    } as Record<string, unknown>),
-  })
-  @ApiBody({ type: CreateDriverDto })
-  @ApiResponse({ status: 201, description: 'Motorista criado.', type: DriverRespostaDto })
-  @ApiResponse({
-    status: 400,
-    description: '`userId` inexistente (ou removido), `licenseExpiry` no passado, ou corpo inválido.',
-    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
-  })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({
-    status: 409,
-    description: 'O usuário já tem motorista, ou o número da CNH já está cadastrado.',
-    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
-  })
-  criar(@Body() dados: CreateDriverDto) {
-    return this.servicoDrivers.criar(dados);
   }
 
   @Patch(':id')
@@ -237,13 +204,13 @@ export class DriversController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Permissions('DRIVER_DELETE')
   @HttpCode(204)
   @ApiOperation({
     summary: 'Remove um motorista (soft delete)',
     description:
       'Marca `deletedAt` no motorista; a linha continua no banco e pode ser restaurada em ' +
-      '`PATCH /drivers/:id/restore`. Acesso: ADMIN.\n\n' +
+      '`PATCH /drivers/:id/restore`. Acesso: permission `DRIVER_DELETE` (ADMIN por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `drivers`; escreve em `drivers`.',
     ...({
       'x-database-tables': { read: ['drivers'], write: ['drivers'] },
@@ -260,12 +227,12 @@ export class DriversController {
   }
 
   @Patch(':id/restore')
-  @Roles('ADMIN')
+  @Permissions('DRIVER_RESTORE')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Restaura um motorista removido',
     description:
-      'Limpa `deletedAt`, revertendo o soft delete. Acesso: ADMIN.\n\n' +
+      'Limpa `deletedAt`, revertendo o soft delete. Acesso: permission `DRIVER_RESTORE` (ADMIN por papel; delegável a outros usuários).\n\n' +
       '`x-database-tables`: lê `drivers`; escreve em `drivers`.',
     ...({
       'x-database-tables': { read: ['drivers'], write: ['drivers'] },
