@@ -9,6 +9,8 @@ import compression from 'compression';
 import { join } from 'path';
 import { AppModule } from './app.module';
 import { ConfigVars } from './config/configuration';
+import { PrismaService } from './database/prisma.service';
+import { enriquecerSwaggerComRoles } from './common/swagger/enriquecer-swagger-com-roles';
 import { garantirPastaDeUploads } from './incidents/utils/upload-incidents.config';
 
 async function bootstrap() {
@@ -63,6 +65,8 @@ async function bootstrap() {
     .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'x-api-key')
     .build();
   const documento = SwaggerModule.createDocument(app, documentoSwagger);
+  // Coloca no Swagger os IDs reais das roles deste ambiente.
+  await enriquecerSwaggerComRoles(documento, app.get(PrismaService));
   SwaggerModule.setup('api/docs', app, documento);
 
   await app.listen(porta);
