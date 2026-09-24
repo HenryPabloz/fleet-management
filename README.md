@@ -180,9 +180,9 @@ npm test
 npm run test:e2e
 ```
 
-No estado atual do repositório: `npm test` roda **3 suítes / 8 testes** (`app.controller.spec.ts`, `via-cep.service.spec.ts`, `trips.service.spec.ts`), e `npm run test:e2e` roda **14 suítes / 249 testes** (`analytics`, `app`, `auth-api-key`, `hard-delete-admin`, `hard-delete-dependencias`, `permissions-delegation`, `roles`, `soft-delete-permissions`, `soft-delete`, `trips-refuelings-incidents`, `users-criacao-troca-role`, `users-me-audit-logs`, `users-motorista-reemissao`, `vehicles-maintenances`), cobrindo auth, RBAC, delegação granular de permissão (`UserPermission`), criação de usuário/motorista e troca de role, reemissão de API key, CRUD dos 7 recursos principais, soft delete/restore por permission, procedures/triggers, integração com ViaCEP, perfil próprio (`/users/me`) e auditoria (`/audit-logs`).
+No estado atual do repositório: `npm test` roda **3 suítes / 8 testes** (`app.controller.spec.ts`, `via-cep.service.spec.ts`, `trips.service.spec.ts`), e `npm run test:e2e` roda **16 suítes / 270 testes** (`analytics`, `app`, `auth-api-key`, `hard-delete-admin`, `hard-delete-dependencias`, `permissions-delegation`, `protecao-admin`, `roles`, `seguranca-r4`, `soft-delete-permissions`, `soft-delete`, `trips-refuelings-incidents`, `users-criacao-troca-role`, `users-me-audit-logs`, `users-motorista-reemissao`, `vehicles-maintenances`), cobrindo auth, RBAC, delegação granular de permissão (`UserPermission`), criação de usuário/motorista e troca de role, reemissão de API key, CRUD dos 7 recursos principais, soft delete/restore por permission, procedures/triggers, integração com ViaCEP, escopo do motorista (registro alheio: 404; `driverId` alheio: 403), proteção de contas ADMIN, perfil próprio (`/users/me`) e auditoria (`/audit-logs`).
 
-**Atenção:** os e2e chamam a API pública real do ViaCEP (sem mock). Uma falha externa (ex: `502` do ViaCEP) pode derrubar 1 teste isolado; nesse caso, rode `npm run test:e2e` de novo antes de investigar.
+**Atenção:** os e2e chamam a API pública real do ViaCEP (sem mock), que oscila. Para mitigar, os specs `trips-refuelings-incidents` e `vehicles-maintenances` usam `jest.retryTimes(2)` (até 2 retentativas por teste). Se ainda assim um teste isolado falhar por causa do ViaCEP, rode `npm run test:e2e` de novo antes de investigar. O teste de analytics não depende de totais globais, porque as suítes rodam em paralelo no mesmo banco.
 
 ## Estrutura do projeto
 
@@ -216,7 +216,7 @@ Fluxo real, em duas camadas. **Não existe cadastro público**: toda conta nasce
 1. **Cadastro** (`POST /users`, JWT + permission `USER_CREATE`): um ADMIN ou FLEET_MANAGER cria o usuário. O servidor gera a API key, grava só o hash SHA-256 e devolve a chave em texto (`apiKey`) **uma única vez** (`Cache-Control: no-store`); ela nunca fica nula e não aparece de novo. Quem cadastrou entrega a chave ao usuário.
    - ADMIN atribui qualquer papel. FLEET_MANAGER (ou quem tiver `USER_CREATE` delegado e não for ADMIN) só cria `DRIVER`; outro papel retorna `403`.
    - Papel `DRIVER` exige o bloco `driver { licenseNumber, licenseExpiry }` (CNH com 11 dígitos numéricos): conta e perfil de motorista nascem na mesma transação. `driver` com outro papel retorna `400`. (`POST /drivers` não existe mais.)
-2. **Login** (`POST /auth/login`): e-mail + senha no corpo **e** a API key no header `x-api-key`. Devolve um **JWT**.
+2. **Login** (`POST /auth/login`): e-mail + senha no corpo **e** a API key no header `x-api-key`. Devolve `{ accessToken, user }`; dentro de `user` vêm `id`, `email`, `fullName`, `role`, `permissions: string[]` (permissions efetivas = papel + delegadas) e `driverId: string | null` (perfil Driver ativo). `POST /auth/refresh-token` e `GET /users/me` devolvem os mesmos dois campos (`permissions` e `driverId`).
 3. **Rotas de negócio**: exigem o JWT no header `Authorization: Bearer <token>`. Cada rota é restrita por papel fixo (`@Roles(...)`) ou por permissão delegável (`@Permissions(...)`), ambos avaliados pelo `RolesGuard` — ver [seção Endpoints](#endpoints) e `projectDocs/projeto-fleet-management.md` (seção 5) para o detalhe de qual mecanismo cada rota usa.
 4. **Renovação**: `POST /auth/refresh-token` troca o JWT (autenticado por Bearer; o front chama antes de expirar). `PATCH /auth/regenerate-key` troca a própria API key: exige a chave atual no header `x-api-key` **e** a `password` no corpo (`400` sem ela, `401` com senha errada); o JWT em uso continua válido e a chave só é usada no login. São rotas e credenciais diferentes, não confundir.
 5. **Chave perdida**: `POST /users/:id/regenerate-api-key` (somente ADMIN, não delegável) reemite a chave de outro usuário, devolvendo a nova uma única vez.
@@ -257,15 +257,21 @@ Autenticação: **pública** (sem guard), **API key** (header `x-api-key`) ou **
 | POST | `/users` | Permission `USER_CREATE` (ADMIN e FLEET_MANAGER; gerente só cria `DRIVER`). Devolve `apiKey` uma vez |
 | PATCH | `/users/:id/role` | `@Roles('ADMIN')` + `USER_ROLE_PROMOTE`/`USER_ROLE_DEMOTE` (o serviço confere a da direção) |
 | POST | `/users/:id/regenerate-api-key` | Somente ADMIN (`@Roles('ADMIN')`, não delegável) |
-| PATCH | `/users/:id` | Permission `USER_UPDATE` (ADMIN por papel) |
-| PUT | `/users/:id` | Permission `USER_UPDATE` (ADMIN por papel) |
+| PATCH | `/users/:id` | Permission `USER_UPDATE` (ADMIN por papel). Aceita só `fullName` e `isActive` |
+| PUT | `/users/:id` | Permission `USER_UPDATE` (ADMIN por papel). Exige `fullName` e `isActive` |
 | DELETE | `/users/:id` | Permission `USER_DELETE` (ADMIN por papel) |
 | PATCH | `/users/:id/restore` | Permission `USER_RESTORE` (ADMIN por papel) |
 | DELETE | `/users/:id/permanent` | Somente ADMIN (`@Roles('ADMIN')`) |
 
 Regras de `PATCH /users/:id/role` (body `{ roleId, driver? }`): ranking `DRIVER < FLEET_MANAGER < ADMIN`; um ADMIN nunca é rebaixado (`403`); ninguém muda a própria role (`409`); mesma role atual `409`; `roleId` inexistente `400`; alvo inexistente ou soft-deletado `404`; virar `DRIVER` sem perfil de motorista exige o bloco `driver` (`400` sem ele; se já tem perfil, o existente é mantido); `driver` com outro papel `400`.
 
-**Pendência conhecida:** `PATCH /users/:id` e `PUT /users/:id` ainda aceitam `roleId` no corpo e trocam o papel **sem** as regras acima (ranking, proteção de ADMIN, bloco `driver`). Hoje só o ADMIN tem `USER_UPDATE` por padrão, mas uma delegação dessa permission abriria o atalho. A troca de papel deve ser feita só por `PATCH /users/:id/role`.
+`roleId` **não é aceito** em `PATCH /users/:id` nem em `PUT /users/:id` (`400` se enviado): a role só muda por `PATCH /users/:id/role`. O `PUT` exige `fullName` e `isActive`; o `PATCH` aceita só `fullName` e `isActive`.
+
+**Proteção de contas ADMIN** (editar, desativar, soft delete, restore e deleção total de usuário):
+
+- Quem não é ADMIN (mesmo com `USER_UPDATE`/`USER_DELETE`/`USER_RESTORE` delegados) recebe `403` ("Only an ADMIN can modify another ADMIN account") ao mexer numa conta ADMIN.
+- Um ADMIN não pode desativar (`isActive=false`), soft-deletar nem apagar de vez **outro** ADMIN (`403`), nem a própria conta (`409`, "You cannot deactivate or delete your own account").
+- ADMIN pode editar o `fullName` de outro ADMIN, reativar e restaurar. Alvos não-ADMIN: comportamento normal.
 
 ### Drivers (`/drivers`)
 
@@ -313,6 +319,10 @@ Não há `POST /drivers`: o motorista nasce junto com o usuário, em `POST /user
 | PATCH | `/trips/:id/restore` | Permission `TRIP_RESTORE` (ADMIN por padrão) |
 | DELETE | `/trips/:id/permanent` | Somente ADMIN |
 
+**Escopo do motorista** (motorista = quem não tem o `*_VIEW_ALL` efetivo; ADMIN e FLEET_MANAGER seguem livres): `GET /trips/:id`, `GET /refuelings/:id` e `GET /incidents/:id` respondem `404` para registro de outro motorista; `PATCH /trips/:id/start|end|cancel` de viagem alheia dá `404`; `POST /trips`, `POST /refuelings` e `POST /incidents` com `driverId` que não é o do próprio motorista dão `403` ("driverId must be your own driver profile"). No `POST /incidents`, se o `403` ocorre, a foto enviada é apagada do disco.
+
+**ViaCEP:** só CEP realmente inválido ou inexistente dá `400`. Indisponibilidade da API externa não vira mais "CEP inválido": timeout e rate limit (`429`) do ViaCEP retornam `504`; erro de servidor (5xx), falha de rede e erro inesperado retornam `502`. Vale para `POST /trips` e `POST /vehicles` (`initialLocationCep`).
+
 **Quilometragem da viagem:** `POST /trips` **não recebe km** (enviar `startKm` retorna `400`); o `start_km` provisório é a quilometragem atual do veículo. `PATCH /trips/:id/start` recebe `{ currentMileage }` (leitura real do hodômetro, maior ou igual ao km do veículo, até 10.000.000), que vira o `startKm` definitivo e a quilometragem do veículo. `PATCH /trips/:id/end` recebe `{ endMileage, endLocation }` (`endMileage` maior ou igual ao `startKm`). Distância = `endKm - startKm` (é o que o analytics usa). Veículo inativo (`isActive = false`) é recusado em `create_trip`/`start_trip` com `409` ("Vehicle is not active").
 
 ### Refuelings (`/refuelings`)
@@ -321,7 +331,7 @@ Não há `POST /drivers`: o motorista nasce junto com o usuário, em `POST /user
 |---|---|---|
 | GET | `/refuelings` | ADMIN, FLEET_MANAGER, DRIVER |
 | GET | `/refuelings/deleted/all` | Permission `REFUELING_RESTORE` (ADMIN por padrão) |
-| GET | `/refuelings/:id` | ADMIN, FLEET_MANAGER, DRIVER |
+| GET | `/refuelings/:id` | ADMIN, FLEET_MANAGER, DRIVER (motorista só vê o próprio; alheio: `404`) |
 | POST | `/refuelings` | ADMIN, FLEET_MANAGER, DRIVER |
 | DELETE | `/refuelings/:id` | Permission `REFUELING_DELETE` (ADMIN por padrão) |
 | PATCH | `/refuelings/:id/restore` | Permission `REFUELING_RESTORE` (ADMIN por padrão) |
@@ -347,7 +357,7 @@ Não há `POST /drivers`: o motorista nasce junto com o usuário, em `POST /user
 |---|---|---|
 | GET | `/incidents` | ADMIN, FLEET_MANAGER, DRIVER |
 | GET | `/incidents/deleted/all` | Permission `INCIDENT_RESTORE` (ADMIN, FLEET_MANAGER) |
-| GET | `/incidents/:id` | ADMIN, FLEET_MANAGER, DRIVER |
+| GET | `/incidents/:id` | ADMIN, FLEET_MANAGER, DRIVER (motorista só vê o próprio; alheio: `404`) |
 | POST | `/incidents` | ADMIN, FLEET_MANAGER, DRIVER |
 | PATCH | `/incidents/:id/status` | ADMIN, FLEET_MANAGER |
 | DELETE | `/incidents/:id` | Permission `INCIDENT_DELETE` (ADMIN, FLEET_MANAGER) |
@@ -379,7 +389,7 @@ Gestão da delegação granular de permissões (tabela `user_permissions`). Toda
 
 ### Roles (`/roles`)
 
-Só leitura. Devolve um array `[{ id, name, description }]` ordenado por `name`, com os 3 papéis fixos (`ADMIN`, `DRIVER`, `FLEET_MANAGER`), sem paginação. Serve para montar o campo `roleId` do formulário de usuário.
+Só leitura. Devolve um array `[{ id, name, description }]` ordenado por `name`, com os 3 papéis fixos (`ADMIN`, `DRIVER`, `FLEET_MANAGER`), sem paginação. Serve para montar o `roleId` do formulário de criação de usuário (`POST /users`) e da troca de role (`PATCH /users/:id/role`).
 
 | Método | Rota | Papéis |
 |---|---|---|
@@ -424,11 +434,18 @@ Bloqueios legítimos (resposta `409` em RFC 7807, com `detail` explicando; nunca
 
 **Auditoria:** `audit_logs.fk_user_id` é anulável, com FK `ON DELETE SET NULL` (migration `20260924120000_anonymize_audit_logs_author`). O histórico de auditoria não impede mais a deleção total de um usuário: as linhas ficam com autor `NULL` (`changedBy: null` em `GET /audit-logs`, "usuário removido"). O trigger continua bloqueando `DELETE` e qualquer `UPDATE`, exceto a transição `fk_user_id` não nulo -> `NULL`. `TRUNCATE audit_logs` (inclusive `... CASCADE` e `TRUNCATE users CASCADE`, que propagaria) também é bloqueado, pelo trigger de statement `trg_block_audit_logs_truncate` (migration `20260924130000_block_audit_logs_truncate`).
 
-**Pendências e limitações conhecidas:** nenhuma em aberto. Resolvidas e decisões:
+**Limitações conhecidas e decisões** (registradas de propósito, não são bugs escondidos):
 
-- **`GET /roles` — resolvido.** A rota existe (ver seção Roles): o front lista os papéis para o select de `roleId`, sem depender do Swagger.
-- **`TRUNCATE audit_logs` — resolvido.** Bloqueado pelo trigger `trg_block_audit_logs_truncate`.
-- **`UPDATE fk_user_id -> NULL` em qualquer linha — decisão consciente.** O trigger `trg_block_audit_logs_changes` aceita essa transição em qualquer linha, e isso foi **aceito por design**: nenhum usuário nem a API tem acesso direto ao banco, então não é risco.
+- **`IsValidCnh` valida só o formato** (11 dígitos), sem os dígitos verificadores.
+- **`POST /incidents`:** se a procedure falhar depois do upload, a foto pode ficar órfã no disco (comportamento anterior, não corrigido).
+- **Utilitário duplicado:** existem `buscarDriverIdProprio` (qualquer Driver não removido, usado nos escopos) e `buscarDriverIdAtivo` (só Driver ativo, usado em login, refresh e `/users/me`).
+- **Os e2e dependem da API pública ViaCEP** (mitigado com `jest.retryTimes(2)`).
+- **`POST /users/:id/permissions` devolve `200`**, não `201`.
+- **`isActive` de veículo/manutenção é somente leitura** na API.
+- **`tripId` de incidente continua opcional** por decisão do usuário.
+- **`VEHICLE_VIEW`, `ROLE_MANAGE` e `PERMISSION_MANAGE` seguem sem rota** (decisão consciente).
+- **`UPDATE fk_user_id -> NULL` em qualquer linha de `audit_logs`:** aceito por design; nenhum usuário nem a API tem acesso direto ao banco.
+- **Resolvidos:** `GET /roles` existe; `TRUNCATE audit_logs` é bloqueado por `trg_block_audit_logs_truncate`; `roleId` saiu de `PATCH/PUT /users/:id`; escopo do motorista fechado; o front recebe `permissions` e `driverId` no login.
 
 ## Exemplos de uso (curl)
 
@@ -441,7 +458,7 @@ curl -X POST http://localhost:3000/auth/login \
   -H "x-api-key: <API_KEY_DO_ADMIN>" \
   -d '{"email":"<EMAIL_ADMIN>","password":"<SENHA_ADMIN>"}'
 
-# 2. Listar papéis (para pegar o roleId de DRIVER)
+# 2. Listar papéis (para pegar o roleId de DRIVER; roleId só é enviado em POST /users e PATCH /users/:id/role)
 curl -X GET http://localhost:3000/roles \
   -H "Authorization: Bearer <JWT_DO_PASSO_1>"
 
@@ -546,7 +563,7 @@ http://localhost:3000/api/docs
 
 (ajuste a porta se `PORT` for diferente de `3000`). Ela documenta todas as rotas de negócio, seus DTOs de entrada/saída, códigos de resposta possíveis e os dois esquemas de segurança (`jwt` para Bearer e `x-api-key` para API key).
 
-**IDs das roles no Swagger:** `POST /users`, `PATCH /users/:id` e `PUT /users/:id` citam `GET /roles` (fonte dos `roleId`) e mostram na descrição a tabela com os `roleId` reais do ambiente (lidos do banco no boot, por `src/common/swagger/enriquecer-swagger-com-roles.ts`) e 3 exemplos nomeados prontos para executar (DRIVER, FLEET_MANAGER, ADMIN). Os e-mails dos exemplos ganham sufixo aleatório a cada boot, para não colidir com contas existentes. Os IDs de role aparecem em destaque azul (`#0400e0`, texto branco) só nas descrições das operações. Todo `POST`/`PATCH`/`PUT` traz um body de exemplo completo, e as descrições explicam driver × user, `initialLocationCep` (opcional, validado no ViaCEP, não persistido), a quilometragem das viagens, as regras do abastecimento e do incidente (`tripId` é opcional; se informado, a viagem precisa estar `IN_PROGRESS` e bater com veículo e motorista).
+**IDs das roles no Swagger:** `POST /users` e `PATCH /users/{id}/role` citam `GET /roles` (fonte dos `roleId`) e mostram na descrição a tabela com os `roleId` reais do ambiente (lidos do banco no boot, por `src/common/swagger/enriquecer-swagger-com-roles.ts`) e 3 exemplos nomeados prontos para executar (DRIVER, FLEET_MANAGER, ADMIN). Os e-mails dos exemplos ganham sufixo aleatório a cada boot, para não colidir com contas existentes. Os IDs de role aparecem em destaque azul (`#0400e0`, texto branco) só nas descrições das operações. Todo `POST`/`PATCH`/`PUT` traz um body de exemplo completo, e as descrições explicam driver × user, `initialLocationCep` (opcional, validado no ViaCEP, não persistido), a quilometragem das viagens, as regras do abastecimento e do incidente (`tripId` é opcional; se informado, a viagem precisa estar `IN_PROGRESS` e bater com veículo e motorista).
 
 ## Banco de dados
 
@@ -557,7 +574,5 @@ PostgreSQL 15, modelado com Prisma (12 models + 9 enums), aplicado via **22 migr
 - **26 CHECK constraints**, validando formato de placa, CNH, e-mail, enums de status/severidade, faixas numéricas, entre outros.
 
 Além disso, `isActive` em `vehicles` e `maintenances` (migration `20260924140000_add_is_active_vehicles_maintenances`) é lido por `create_trip`, `start_trip`, `register_refueling` e `register_incident`, que recusam veículo inativo (`20260924150000_block_inactive_vehicle_in_procedures`); `create_trip` deixou de receber km (`20260924160000_trip_start_km_from_vehicle`).
-
-**Limitação conhecida:** `IsValidCnh` valida só o formato (11 dígitos), sem os dígitos verificadores.
 
 Contagens confirmadas diretamente no banco (`information_schema.routines`, `pg_trigger`, `pg_constraint`, `_prisma_migrations`) nesta revisão do README.
