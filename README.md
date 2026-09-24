@@ -179,7 +179,7 @@ npm test
 npm run test:e2e
 ```
 
-No estado atual do repositório: `npm test` roda **1 suíte / 1 teste** (o teste unitário de `AppController`), e `npm run test:e2e` roda **10 suítes / 175 testes** (`analytics`, `app`, `auth-api-key`, `permissions-delegation`, `soft-delete`, `trips-refuelings-incidents`, `users-me-audit-logs`, `vehicles-maintenances`), cobrindo os fluxos de auth, RBAC, delegação granular de permissão (`UserPermission`), CRUD dos 7 recursos principais, soft delete, procedures/triggers, integração com ViaCEP, perfil próprio (`/users/me`) e auditoria (`/audit-logs`).
+No estado atual do repositório: `npm test` roda **1 suíte / 1 teste** (o teste unitário de `AppController`), e `npm run test:e2e` roda **11 suítes / 180 testes** (`analytics`, `app`, `auth-api-key`, `hard-delete-admin`, `hard-delete-dependencias`, `permissions-delegation`, `roles`, `soft-delete`, `trips-refuelings-incidents`, `users-me-audit-logs`, `vehicles-maintenances`), cobrindo os fluxos de auth, RBAC, delegação granular de permissão (`UserPermission`), CRUD dos 7 recursos principais, soft delete, procedures/triggers, integração com ViaCEP, perfil próprio (`/users/me`) e auditoria (`/audit-logs`).
 
 ## Estrutura do projeto
 
@@ -195,6 +195,7 @@ src/
 ├── incidents/     # Registro de incidentes, com upload opcional de foto
 ├── analytics/     # Indicadores de frota (consumo, distância, eficiência, incidentes)
 ├── permissions/   # Delegação granular de permissões (UserPermission), ADMIN-only
+├── roles/         # Listagem dos papéis (GET /roles), para o select de roleId
 ├── external/
 │   └── viacep/    # Cliente HTTP para a API pública do ViaCEP
 ├── common/        # DTOs, interceptors, pipes, validators, utils e schemas compartilhados
@@ -203,7 +204,7 @@ src/
 └── generated/     # Prisma Client gerado (não editar manualmente)
 ```
 
-Cada módulo de recurso (`drivers`, `vehicles`, `trips`, `refuelings`, `maintenances`, `incidents`, `users`, `permissions`) segue o mesmo padrão: `*.controller.ts`, `*.service.ts`, `*.module.ts` e uma pasta `dto/`.
+Cada módulo de recurso (`drivers`, `vehicles`, `trips`, `refuelings`, `maintenances`, `incidents`, `users`, `permissions`, `roles`) segue o mesmo padrão: `*.controller.ts`, `*.service.ts`, `*.module.ts` e uma pasta `dto/`.
 
 ## Autenticação
 
@@ -357,15 +358,23 @@ Gestão da delegação granular de permissões (tabela `user_permissions`). Toda
 | POST | `/users/:id/permissions` | ADMIN |
 | DELETE | `/users/:id/permissions/:code` | ADMIN |
 
+### Roles (`/roles`)
+
+Só leitura. Devolve um array `[{ id, name, description }]` ordenado por `name`, com os 3 papéis fixos (`ADMIN`, `DRIVER`, `FLEET_MANAGER`), sem paginação. Serve para montar o campo `roleId` do formulário de usuário.
+
+| Método | Rota | Papéis |
+|---|---|---|
+| GET | `/roles` | Permissão `USER_CREATE` ou `USER_UPDATE` (basta uma): ADMIN por papel; FLEET_MANAGER só por delegação (`POST /users/:id/permissions`). DRIVER: `403`; sem token: `401`. |
+
 ### Audit logs (`/audit-logs`)
 
-Só leitura: `audit_logs` é append-only (trigger do banco bloqueia `DELETE` e qualquer `UPDATE`, exceto a anonimização do autor `fk_user_id` -> `NULL`), não existe rota de escrita. `changedBy` pode vir `null` (autor removido).
+Só leitura: `audit_logs` é append-only (trigger do banco bloqueia `DELETE`, `TRUNCATE` e qualquer `UPDATE`, exceto a anonimização do autor `fk_user_id` -> `NULL`), não existe rota de escrita. `changedBy` pode vir `null` (autor removido).
 
 | Método | Rota | Papéis |
 |---|---|---|
 | GET | `/audit-logs` | ADMIN (permissão `AUDIT_VIEW`, por papel); outros papéis só via delegação granular (`UserPermission`). Filtros opcionais `entityType`/`entityId`. |
 
-**Total: 78 rotas de negócio** nos 11 controllers acima (o `GET /` da raiz é só o placeholder padrão do `nest new`, e o `GET /health` é infraestrutura — nenhum dos dois faz parte da API de negócio). Nas tabelas acima, "Papéis" lista quem tem acesso **por papel** (`@Roles(...)`, fixo) ou **por permissão** (`@Permissions(...)`, que também aceita delegação granular via `UserPermission` — ver seção 5 de `projectDocs/projeto-fleet-management.md` para o detalhe de qual mecanismo cada rota usa).
+**Total: 79 rotas de negócio** nos 12 controllers acima (o `GET /` da raiz é só o placeholder padrão do `nest new`, e o `GET /health` é infraestrutura — nenhum dos dois faz parte da API de negócio). Nas tabelas acima, "Papéis" lista quem tem acesso **por papel** (`@Roles(...)`, fixo) ou **por permissão** (`@Permissions(...)`, que também aceita delegação granular via `UserPermission` — ver seção 5 de `projectDocs/projeto-fleet-management.md` para o detalhe de qual mecanismo cada rota usa).
 
 ## Exclusão: soft delete e deleção total
 
@@ -390,13 +399,13 @@ Bloqueios legítimos (resposta `409` em RFC 7807, com `detail` explicando; nunca
 
 **Viagem x incidentes:** `DELETE /trips/:id/permanent` só passa se **todos** os incidentes da viagem estiverem `RESOLVED`; senão retorna `409` ("Cannot permanently delete a trip with unresolved incidents. Resolve them first."). Quando passa, os incidentes resolvidos são apagados junto, na mesma transação (sem incidente órfão), e as fotos saem do disco após o commit.
 
-**Auditoria:** `audit_logs.fk_user_id` é anulável, com FK `ON DELETE SET NULL` (migration `20260924120000_anonymize_audit_logs_author`). O histórico de auditoria não impede mais a deleção total de um usuário: as linhas ficam com autor `NULL` (`changedBy: null` em `GET /audit-logs`, "usuário removido"). O trigger continua bloqueando `DELETE` e qualquer `UPDATE`, exceto a transição `fk_user_id` não nulo -> `NULL`.
+**Auditoria:** `audit_logs.fk_user_id` é anulável, com FK `ON DELETE SET NULL` (migration `20260924120000_anonymize_audit_logs_author`). O histórico de auditoria não impede mais a deleção total de um usuário: as linhas ficam com autor `NULL` (`changedBy: null` em `GET /audit-logs`, "usuário removido"). O trigger continua bloqueando `DELETE` e qualquer `UPDATE`, exceto a transição `fk_user_id` não nulo -> `NULL`. `TRUNCATE audit_logs` (inclusive `... CASCADE` e `TRUNCATE users CASCADE`, que propagaria) também é bloqueado, pelo trigger de statement `trg_block_audit_logs_truncate` (migration `20260924130000_block_audit_logs_truncate`).
 
-**Pendências e limitações conhecidas:**
+**Pendências e limitações conhecidas:** nenhuma em aberto. Resolvidas e decisões:
 
-- **Não existe `GET /roles`.** Um front não consegue listar os papéis para um select; hoje os `roleId` só aparecem na descrição do Swagger. É pendência que depende de decisão do dono do projeto, não comportamento intencional.
-- O trigger de `audit_logs` permite `UPDATE fk_user_id -> NULL` em qualquer linha: quem tem acesso direto ao banco poderia anonimizar o autor de um registro.
-- `TRUNCATE audit_logs` não é bloqueado (já era assim antes). Sugestão: trigger de statement `BEFORE TRUNCATE`.
+- **`GET /roles` — resolvido.** A rota existe (ver seção Roles): o front lista os papéis para o select de `roleId`, sem depender do Swagger.
+- **`TRUNCATE audit_logs` — resolvido.** Bloqueado pelo trigger `trg_block_audit_logs_truncate`.
+- **`UPDATE fk_user_id -> NULL` em qualquer linha — decisão consciente.** O trigger `trg_block_audit_logs_changes` aceita essa transição em qualquer linha, e isso foi **aceito por design**: nenhum usuário nem a API tem acesso direto ao banco, então não é risco.
 
 ## Exemplos de uso (curl)
 
@@ -491,14 +500,14 @@ http://localhost:3000/api/docs
 
 (ajuste a porta se `PORT` for diferente de `3000`). Ela documenta todas as rotas de negócio, seus DTOs de entrada/saída, códigos de resposta possíveis e os dois esquemas de segurança (`jwt` para Bearer e `x-api-key` para API key).
 
-**IDs das roles no Swagger:** `POST /users`, `PATCH /users/:id` e `PUT /users/:id` mostram na descrição a tabela com os `roleId` reais do ambiente (lidos do banco no boot, por `src/common/swagger/enriquecer-swagger-com-roles.ts`) e 3 exemplos nomeados prontos para executar (DRIVER, FLEET_MANAGER, ADMIN). Os e-mails dos exemplos ganham sufixo aleatório a cada boot, para não colidir com contas existentes.
+**IDs das roles no Swagger:** `POST /users`, `PATCH /users/:id` e `PUT /users/:id` citam `GET /roles` (fonte dos `roleId`) e mostram na descrição a tabela com os `roleId` reais do ambiente (lidos do banco no boot, por `src/common/swagger/enriquecer-swagger-com-roles.ts`) e 3 exemplos nomeados prontos para executar (DRIVER, FLEET_MANAGER, ADMIN). Os e-mails dos exemplos ganham sufixo aleatório a cada boot, para não colidir com contas existentes.
 
 ## Banco de dados
 
-PostgreSQL 15, modelado com Prisma (12 models + 9 enums), aplicado via **18 migrations**. As regras de integridade mais sensíveis vivem no banco, não só na aplicação:
+PostgreSQL 15, modelado com Prisma (12 models + 9 enums), aplicado via **19 migrations**. As regras de integridade mais sensíveis vivem no banco, não só na aplicação:
 
 - **6 procedures**: `create_trip`, `start_trip`, `end_trip`, `cancel_trip`, `register_incident`, `register_refueling`.
-- **12 triggers** (com suas 12 funções associadas), cobrindo auditoria append-only (`audit_logs`, com exceção só para anonimizar o autor), sincronização de quilometragem/status do veículo a partir de viagens e abastecimentos, e bloqueios de concorrência (ex: impedir duas viagens ativas para o mesmo veículo ou motorista).
+- **13 triggers** (com suas 13 funções associadas), cobrindo auditoria append-only (`audit_logs`, bloqueando `DELETE`, `UPDATE` e `TRUNCATE`, com exceção só para anonimizar o autor), sincronização de quilometragem/status do veículo a partir de viagens e abastecimentos, e bloqueios de concorrência (ex: impedir duas viagens ativas para o mesmo veículo ou motorista).
 - **26 CHECK constraints**, validando formato de placa, CNH, e-mail, enums de status/severidade, faixas numéricas, entre outros.
 
 Contagens confirmadas diretamente no banco (`information_schema.routines`, `pg_trigger`, `pg_constraint`, `_prisma_migrations`) nesta revisão do README.
