@@ -377,6 +377,7 @@ export class UsersController {
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Usuário não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 409, description: 'Usuário tem motorista vinculado, ou registrou viagens, abastecimentos, manutenções ou incidentes. O histórico de auditoria NÃO bloqueia: as linhas de audit_logs permanecem com autor nulo.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   async removerPermanentemente(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {

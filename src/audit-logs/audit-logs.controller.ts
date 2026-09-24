@@ -40,7 +40,7 @@ const AUDIT_LOG_SCHEMA = {
     entityType: { type: 'string', example: 'TRIP' },
     entityId: { type: 'string', format: 'uuid' },
     action: { type: 'string', enum: ['CREATE', 'UPDATE', 'DELETE'], example: 'UPDATE' },
-    changedBy: { type: 'string', format: 'uuid' },
+    changedBy: { type: 'string', format: 'uuid', nullable: true, description: 'Autor da alteração. null = usuário removido.' },
     oldValues: { type: 'object', nullable: true, example: null },
     newValues: { type: 'object', nullable: true, example: { status: 'IN_PROGRESS' } },
     createdAt: { type: 'string', format: 'date-time' },

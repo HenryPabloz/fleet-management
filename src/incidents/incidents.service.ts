@@ -1,7 +1,4 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { existsSync } from 'fs';
-import { unlink } from 'fs/promises';
-import { join } from 'path';
 import { PrismaService } from '../database/prisma.service';
 import { SoftDeleteService } from '../common/services/soft-delete.service';
 import { traduzirErroDeProcedure } from '../common/utils/mapeador-erros-procedure.util';
@@ -11,7 +8,7 @@ import {
   ResultadoPaginado,
 } from '../common/utils/paginacao.util';
 import { buscarDriverIdProprio } from '../common/utils/resolver-driver-proprio.util';
-import { PASTA_UPLOADS_INCIDENTS } from './utils/upload-incidents.config';
+import { apagarFotoDoIncidente } from './utils/apagar-foto-incidente.util';
 import { CreateIncidentDto } from './dto/create-incident.dto';
 import { UpdateIncidentStatusDto } from './dto/update-incident-status.dto';
 
@@ -178,17 +175,7 @@ export class IncidentsService {
       throw new NotFoundException('Incident not found');
     }
 
-    if (incidente.photoKey) {
-      const caminhoDoArquivo = join(PASTA_UPLOADS_INCIDENTS, incidente.photoKey);
-      if (existsSync(caminhoDoArquivo)) {
-        try {
-          await unlink(caminhoDoArquivo);
-        } catch {
-          // Arquivo já pode ter sido apagado por fora; não bloqueia a remoção do registro.
-        }
-      }
-    }
-
     await this.servicoSoftDelete.removerPermanentemente('incident', id);
+    await apagarFotoDoIncidente(incidente.photoKey);
   }
 }

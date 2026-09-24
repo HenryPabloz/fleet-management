@@ -335,13 +335,13 @@ export class MaintenancesController {
 
   // Irreversível: apaga a linha de verdade do banco (hard delete).
   @Delete(':id/permanent')
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Roles('ADMIN')
   @HttpCode(204)
   @ApiOperation({
     summary: 'Remove uma manutenção permanentemente (hard delete)',
     description:
       'Apaga a linha de verdade do banco — irreversível, diferente do `DELETE /maintenances/:id` ' +
-      '(soft delete). Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      '(soft delete). Acesso: ADMIN (FLEET_MANAGER só faz soft delete).\n\n' +
       '`x-database-tables`: lê `maintenances`; escreve (apaga) em `maintenances`.',
     ...({
       'x-database-tables': { read: ['maintenances'], write: ['maintenances'] },

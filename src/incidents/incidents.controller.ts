@@ -364,14 +364,14 @@ export class IncidentsController {
 
   // Irreversível: apaga a linha de verdade do banco (e o arquivo físico, se houver).
   @Delete(':id/permanent')
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Roles('ADMIN')
   @HttpCode(204)
   @ApiOperation({
     summary: 'Remove um incidente permanentemente (hard delete)',
     description:
       'Apaga a linha de verdade do banco — irreversível, diferente do `DELETE /incidents/:id` ' +
       '(soft delete). Aqui sim o arquivo físico da foto (se houver) é apagado do disco. Acesso: ' +
-      'ADMIN, FLEET_MANAGER.\n\n' +
+      'ADMIN (FLEET_MANAGER só faz soft delete).\n\n' +
       '`x-database-tables`: lê `incidents`; escreve (apaga) em `incidents`.',
     ...({
       'x-database-tables': { read: ['incidents'], write: ['incidents'] },

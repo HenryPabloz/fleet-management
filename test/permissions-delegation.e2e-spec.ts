@@ -146,32 +146,13 @@ describe('Delegação granular de permissões (UserPermission) (e2e)', () => {
 
   afterAll(async () => {
     if (prisma && idsDeUsuarioParaLimpar.length > 0) {
-      // audit_logs é append-only (trigger do banco bloqueia DELETE/UPDATE nela).
-      // Usuário com log de auditoria nunca pode ser apagado de vez: só dá pra soft-deletar.
-      const registrosComAuditLog = await prisma.auditLog.findMany({
-        where: { changedBy: { in: idsDeUsuarioParaLimpar } },
-        select: { changedBy: true },
-        distinct: ['changedBy'],
-      });
-      const idsParaSoftDelete = registrosComAuditLog.map((registro) => registro.changedBy);
-      const idsParaApagarDeVez = idsDeUsuarioParaLimpar.filter(
-        (id) => !idsParaSoftDelete.includes(id),
-      );
-
+      // Histórico de auditoria não bloqueia mais: as linhas de audit_logs ficam com autor NULL.
       await prisma.userPermission.deleteMany({
         where: { userId: { in: idsDeUsuarioParaLimpar } },
       });
-      if (idsParaSoftDelete.length > 0) {
-        await prisma.user.updateMany({
-          where: { id: { in: idsParaSoftDelete } },
-          data: { deletedAt: new Date() },
-        });
-      }
-      if (idsParaApagarDeVez.length > 0) {
-        await prisma.user.deleteMany({
-          where: { id: { in: idsParaApagarDeVez } },
-        });
-      }
+      await prisma.user.deleteMany({
+        where: { id: { in: idsDeUsuarioParaLimpar } },
+      });
     }
     if (prisma && idsDeVeiculoParaLimpar.length > 0) {
       await prisma.vehicle.deleteMany({

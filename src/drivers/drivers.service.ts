@@ -171,6 +171,19 @@ export class DriversService {
     if (!motorista) {
       throw new NotFoundException('Driver not found');
     }
+
+    // Conta também os soft-deletados, pois a FK do banco os enxerga.
+    const [temViagem, temAbastecimento, temIncidente] = await Promise.all([
+      this.servicoPrisma.trip.findFirst({ where: { driverId: id } }),
+      this.servicoPrisma.refueling.findFirst({ where: { driverId: id } }),
+      this.servicoPrisma.incident.findFirst({ where: { driverId: id } }),
+    ]);
+    if (temViagem || temAbastecimento || temIncidente) {
+      throw new ConflictException(
+        'Cannot permanently delete a driver with associated trips, refuelings or incidents.',
+      );
+    }
+
     await this.servicoSoftDelete.removerPermanentemente('driver', id);
   }
 

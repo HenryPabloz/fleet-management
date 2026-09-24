@@ -373,14 +373,14 @@ export class VehiclesController {
 
   // Irreversível: apaga a linha de verdade do banco (hard delete).
   @Delete(':id/permanent')
-  @Roles('ADMIN', 'FLEET_MANAGER')
+  @Roles('ADMIN')
   @HttpCode(204)
   @ApiOperation({
     summary: 'Remove um veículo permanentemente (hard delete)',
     description:
       'Apaga a linha de verdade do banco — irreversível, diferente do `DELETE /vehicles/:id` ' +
       '(soft delete). Bloqueado se existir viagem, abastecimento, manutenção ou incidente ' +
-      'associado ao veículo (a FK não tem ON DELETE CASCADE). Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      'associado ao veículo (a FK não tem ON DELETE CASCADE). Acesso: ADMIN (FLEET_MANAGER só faz soft delete).\n\n' +
       '`x-database-tables`: lê `vehicles`, `trips`, `refuelings`, `maintenances`, `incidents`; ' +
       'escreve (apaga) em `vehicles`.',
     ...({

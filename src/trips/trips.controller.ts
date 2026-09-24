@@ -413,10 +413,11 @@ export class TripsController {
     summary: 'Remove uma viagem permanentemente (hard delete)',
     description:
       'Apaga a linha de verdade do banco — irreversível, diferente do `DELETE /trips/:id` (soft ' +
-      'delete). Bloqueado se existir incidente associado à viagem. Acesso: ADMIN.\n\n' +
-      '`x-database-tables`: lê `trips`, `incidents`; escreve (apaga) em `trips`.',
+      'delete). Só é permitido se todos os incidentes da viagem estiverem RESOLVED (senão 409); nesse caso os ' +
+      'incidentes resolvidos são apagados junto, na mesma transação, para não sobrar incidente órfão. Acesso: ADMIN.\n\n' +
+      '`x-database-tables`: lê `trips`, `incidents`; escreve (apaga) em `trips` e `incidents`.',
     ...({
-      'x-database-tables': { read: ['trips', 'incidents'], write: ['trips'] },
+      'x-database-tables': { read: ['trips', 'incidents'], write: ['trips', 'incidents'] },
     } as Record<string, unknown>),
   })
   @ApiParam({ name: 'id', description: 'Id da viagem (UUID).', format: 'uuid' })
@@ -425,8 +426,11 @@ export class TripsController {
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 409, description: 'Viagem tem incidentes associados.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  async removerPermanentemente(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.servicoTrips.removerPermanentemente(id);
+  @ApiResponse({ status: 409, description: 'Viagem tem incidente ainda não resolvido (status diferente de RESOLVED).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  async removerPermanentemente(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() usuario: UsuarioLogado,
+  ): Promise<void> {
+    await this.servicoTrips.removerPermanentemente(id, usuario.userId);
   }
 }

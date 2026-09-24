@@ -89,32 +89,13 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
 
   afterAll(async () => {
     if (prisma && idsDeUsuarioParaLimpar.length > 0) {
-      // audit_logs é append-only (trigger do banco bloqueia DELETE/UPDATE nela).
-      // Usuário com log de auditoria nunca pode ser apagado de vez: só dá pra soft-deletar.
-      const registrosComAuditLog = await prisma.auditLog.findMany({
-        where: { changedBy: { in: idsDeUsuarioParaLimpar } },
-        select: { changedBy: true },
-        distinct: ['changedBy'],
-      });
-      const idsParaSoftDelete = registrosComAuditLog.map((registro) => registro.changedBy);
-      const idsParaApagarDeVez = idsDeUsuarioParaLimpar.filter(
-        (id) => !idsParaSoftDelete.includes(id),
-      );
-
+      // Histórico de auditoria não bloqueia mais: as linhas de audit_logs ficam com autor NULL.
       await prisma.driver.deleteMany({
         where: { userId: { in: idsDeUsuarioParaLimpar } },
       });
-      if (idsParaSoftDelete.length > 0) {
-        await prisma.user.updateMany({
-          where: { id: { in: idsParaSoftDelete } },
-          data: { deletedAt: new Date() },
-        });
-      }
-      if (idsParaApagarDeVez.length > 0) {
-        await prisma.user.deleteMany({
-          where: { id: { in: idsParaApagarDeVez } },
-        });
-      }
+      await prisma.user.deleteMany({
+        where: { id: { in: idsDeUsuarioParaLimpar } },
+      });
     }
     if (app) {
       await app.close();
@@ -431,7 +412,7 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
         'delete',
         `/users/${idUsuarioCriador}/permanent`,
       ).expect(409);
-      expect(resposta.body.detail).toContain('associated history');
+      expect(resposta.body.detail).toContain('registered trips');
 
       const usuarioNoBanco = await prisma.user.findUnique({
         where: { id: idUsuarioCriador },
@@ -443,16 +424,6 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
       await prisma.trip.delete({ where: { id: trip.id } });
       await prisma.driver.delete({ where: { id: driver.body.id } });
       await prisma.vehicle.delete({ where: { id: veiculo.id } });
-
-      // idUsuarioCriador tem um audit_log com fk_user_id apontando pra ele
-      // (trigger da trip usa createdBy quando não há sessão): fica permanentemente
-      // bloqueado pra hard delete, por design. Tira do array de limpeza forçada
-      // do afterAll (senão o deleteMany bruto quebraria na mesma FK) e deixa
-      // soft-deletado, igual ao residual esperado de audit_logs.
-      const posicao = idsDeUsuarioParaLimpar.indexOf(idUsuarioCriador);
-      if (posicao !== -1) {
-        idsDeUsuarioParaLimpar.splice(posicao, 1);
-      }
     });
   });
 

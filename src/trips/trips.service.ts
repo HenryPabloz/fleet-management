@@ -1,4 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '../generated/prisma/client';
+import { apagarFotoDoIncidente } from '../incidents/utils/apagar-foto-incidente.util';
 import { PrismaService } from '../database/prisma.service';
 import { SoftDeleteService } from '../common/services/soft-delete.service';
 import { ViaCepService } from '../external/viacep/via-cep.service';
@@ -204,21 +206,49 @@ export class TripsService {
     return montarPaginacao(dados, total, paginacao.page, paginacao.pageSize);
   }
 
-  async removerPermanentemente(id: string): Promise<void> {
+  // Só apaga se todos os incidentes da viagem estiverem RESOLVED; eles são apagados junto
+  // (sem órfãos), na mesma transação. As fotos só saem do disco depois do commit.
+  async removerPermanentemente(id: string, idDoUsuario: string): Promise<void> {
     const viagem = await this.servicoPrisma.trip.findUnique({ where: { id } });
     if (!viagem) {
       throw new NotFoundException('Trip not found');
     }
 
-    const temIncidente = await this.servicoPrisma.incident.findFirst({
-      where: { tripId: id },
-    });
-    if (temIncidente) {
-      throw new ConflictException(
-        'Cannot permanently delete a trip with associated incidents.',
-      );
+    let fotosParaApagar: (string | null)[] = [];
+
+    try {
+      await this.servicoPrisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT set_config('app.current_user_id', ${idDoUsuario}::text, true)`;
+
+        const incidentes = await tx.incident.findMany({ where: { tripId: id } });
+        const temNaoResolvido = incidentes.some(
+          (incidente) => incidente.status !== 'RESOLVED',
+        );
+        if (temNaoResolvido) {
+          throw new ConflictException(
+            'Cannot permanently delete a trip with unresolved incidents. Resolve them first.',
+          );
+        }
+
+        await tx.incident.deleteMany({ where: { tripId: id } });
+        await tx.trip.delete({ where: { id } });
+
+        fotosParaApagar = incidentes.map((incidente) => incidente.photoKey);
+      });
+    } catch (erro) {
+      if (
+        erro instanceof Prisma.PrismaClientKnownRequestError &&
+        erro.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'Cannot permanently delete: the trip is referenced by other records.',
+        );
+      }
+      throw erro;
     }
 
-    await this.servicoSoftDelete.removerPermanentemente('trip', id);
+    for (const chaveDaFoto of fotosParaApagar) {
+      await apagarFotoDoIncidente(chaveDaFoto);
+    }
   }
 }

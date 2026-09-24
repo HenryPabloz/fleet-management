@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
+import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 
 // Nomes de model como o Prisma Client expõe (minúsculo), só os que têm deletedAt.
@@ -74,7 +75,20 @@ export class SoftDeleteService {
     nome: NomeDeModeloComSoftDelete,
     id: string,
   ): Promise<T> {
-    return this.modelo(nome).delete({ where: { id } });
+    try {
+      return await this.modelo(nome).delete({ where: { id } });
+    } catch (erro) {
+      // Rede de segurança: se o banco recusar por FK, devolve 409 em vez de 500.
+      if (
+        erro instanceof Prisma.PrismaClientKnownRequestError &&
+        erro.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'Cannot permanently delete: the record is referenced by other records.',
+        );
+      }
+      throw erro;
+    }
   }
 
   async listarRemovidos<T = unknown>(

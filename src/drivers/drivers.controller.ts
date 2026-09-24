@@ -189,7 +189,7 @@ export class DriversController {
       'entra aqui, o vínculo é fixo após criado. Acesso: ADMIN, FLEET_MANAGER (via permissão DRIVER_UPDATE).\n\n' +
       '`x-database-tables`: lê `drivers`; escreve em `drivers`.',
     ...({
-      'x-database-tables': { read: ['drivers'], write: ['drivers'] },
+      'x-database-tables': { read: ['drivers', 'trips', 'refuelings', 'incidents'], write: ['drivers'] },
     } as Record<string, unknown>),
   })
   @ApiParam({ name: 'id', description: 'Id do motorista (UUID).', format: 'uuid' })
@@ -301,6 +301,7 @@ export class DriversController {
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 409, description: 'Motorista tem viagens, abastecimentos ou incidentes associados (inclusive removidos logicamente).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   async removerPermanentemente(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
