@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { buscarCodigosEfetivos } from '../common/utils/perfil-logado.util';
 import { UsersService } from '../users/users.service';
 
 @Injectable()
@@ -22,21 +23,7 @@ export class PermissionsService {
   // pelos controllers que precisam saber se o usuário tem a versão "ALL" ou
   // só a "OWN" de uma permissão (ex: TRIP_VIEW_ALL vs TRIP_VIEW_OWN).
   async obterCodigosEfetivos(usuarioId: string, roleId: string): Promise<string[]> {
-    const [permissoesDoPapel, permissoesIndividuais] = await Promise.all([
-      this.servicoPrisma.rolePermission.findMany({
-        where: { roleId },
-        include: { permission: true },
-      }),
-      this.servicoPrisma.userPermission.findMany({
-        where: { userId: usuarioId },
-        include: { permission: true },
-      }),
-    ]);
-
-    return [
-      ...permissoesDoPapel.map((item) => item.permission.code),
-      ...permissoesIndividuais.map((item) => item.permission.code),
-    ];
+    return buscarCodigosEfetivos(this.servicoPrisma, usuarioId, roleId);
   }
 
   // Combina as permissões herdadas do papel com as concedidas individualmente ao usuário.

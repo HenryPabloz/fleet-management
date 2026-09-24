@@ -7,6 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../database/prisma.service';
+import { buscarCodigosEfetivos, buscarDriverIdAtivo } from '../common/utils/perfil-logado.util';
 import { Prisma } from '../generated/prisma/client';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { LoginWithApiKeyDto } from './dto/login-with-api-key.dto';
@@ -76,6 +77,8 @@ export class AuthService {
         email: usuario.email,
         fullName: usuario.fullName,
         role: usuario.role.name,
+        permissions: await buscarCodigosEfetivos(this.servicoPrisma, usuario.id, usuario.roleId),
+        driverId: await buscarDriverIdAtivo(this.servicoPrisma, usuario.id),
       },
     };
   }
@@ -106,6 +109,8 @@ export class AuthService {
         email: usuario.email,
         fullName: usuario.fullName,
         role: usuario.role.name,
+        permissions: await buscarCodigosEfetivos(this.servicoPrisma, usuario.id, usuario.roleId),
+        driverId: await buscarDriverIdAtivo(this.servicoPrisma, usuario.id),
       },
     };
   }

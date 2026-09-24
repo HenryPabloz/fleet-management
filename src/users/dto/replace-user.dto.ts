@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsNotEmpty, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
-// PUT: substitui todos os campos editáveis, todos obrigatórios.
+// PUT: substitui todos os campos editáveis, todos obrigatórios. A role só muda por PATCH /users/:id/role.
 // E-mail e senha não entram aqui de propósito (fluxo próprio, fora de escopo agora).
 export class ReplaceUserDto {
   @ApiProperty({ description: 'Nome completo.', example: 'João da Silva' })
@@ -16,13 +16,6 @@ export class ReplaceUserDto {
   @IsNotEmpty()
   @MaxLength(150)
   fullName!: string;
-
-  @ApiProperty({
-    description: 'Identificador do papel (role) do usuário (UUID). Os papéis também podem ser listados em GET /roles.',
-    example: 'f1e2d3c4-b5a6-4978-8899-001122334455',
-  })
-  @IsUUID()
-  roleId!: string;
 
   @ApiProperty({ description: 'Se o usuário está ativo.', example: true })
   @IsBoolean()

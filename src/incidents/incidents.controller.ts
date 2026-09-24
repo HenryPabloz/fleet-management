@@ -100,6 +100,18 @@ export class IncidentsController {
     private servicoPermissions: PermissionsService,
   ) {}
 
+  // Diz se o usuário vê tudo (INCIDENT_VIEW_ALL) ou só o próprio.
+  private async resolverEscopoDoUsuario(usuario: UsuarioLogado) {
+    const codigos = await this.servicoPermissions.obterCodigosEfetivos(
+      usuario.userId,
+      usuario.roleId,
+    );
+    return {
+      userId: usuario.userId,
+      temPermissaoViewAll: codigos.includes('INCIDENT_VIEW_ALL'),
+    };
+  }
+
   @Get()
   @Permissions('INCIDENT_VIEW_OWN', 'INCIDENT_VIEW_ALL')
   @ApiOperation({
@@ -199,8 +211,9 @@ export class IncidentsController {
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Incidente não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  buscarPorId(@Param('id', ParseUUIDPipe) id: string) {
-    return this.servicoIncidents.buscarPorId(id);
+  async buscarPorId(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() usuario: UsuarioLogado) {
+    const escopo = await this.resolverEscopoDoUsuario(usuario);
+    return this.servicoIncidents.buscarPorId(id, escopo);
   }
 
   @Post()
@@ -264,7 +277,7 @@ export class IncidentsController {
     description: 'Motorista inativo, ou `tripId` informado com motorista/status de viagem incompatíveis.',
     schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
-  criar(
+  async criar(
     @Body() dados: CreateIncidentDto,
     @UploadedFile() arquivo: Express.Multer.File | undefined,
     @CurrentUser() usuario: UsuarioLogado,
@@ -279,7 +292,8 @@ export class IncidentsController {
       photoKey = arquivo.filename;
     }
 
-    return this.servicoIncidents.criar(dados, photoUrl, photoKey, usuario.userId);
+    const escopo = await this.resolverEscopoDoUsuario(usuario);
+    return this.servicoIncidents.criar(dados, photoUrl, photoKey, usuario.userId, escopo);
   }
 
   @Patch(':id/status')

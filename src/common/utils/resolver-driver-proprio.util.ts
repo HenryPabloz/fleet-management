@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 
 // Resolve o Driver.id do usuário logado (via User.id), usado nas listagens
@@ -15,4 +16,25 @@ export async function buscarDriverIdProprio(
     return null;
   }
   return driver.id;
+}
+
+export interface EscopoDoUsuario {
+  userId: string;
+  temPermissaoViewAll: boolean;
+}
+
+// Quem não tem a permissão *_VIEW_ALL só pode agir no próprio driverId.
+// Se o driverId do corpo for de outro motorista, devolve 403.
+export async function garantirDriverIdProprio(
+  servicoPrisma: PrismaService,
+  escopo: EscopoDoUsuario,
+  driverIdDoCorpo: string,
+): Promise<void> {
+  if (escopo.temPermissaoViewAll) {
+    return;
+  }
+  const driverIdProprio = await buscarDriverIdProprio(servicoPrisma, escopo.userId);
+  if (!driverIdProprio || driverIdProprio !== driverIdDoCorpo) {
+    throw new ForbiddenException('driverId must be your own driver profile');
+  }
 }

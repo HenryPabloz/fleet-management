@@ -21,6 +21,21 @@ class LoginUsuarioDto {
     example: 'DRIVER',
   })
   role!: string;
+
+  @ApiProperty({
+    description: 'Códigos das permissões efetivas: as do papel mais as concedidas individualmente.',
+    type: [String],
+    example: ['PROFILE_VIEW', 'TRIP_VIEW_OWN', 'TRIP_CREATE'],
+  })
+  permissions!: string[];
+
+  @ApiProperty({
+    description: 'Id do perfil de motorista ativo do usuário (usado em driverId de viagens, abastecimentos e incidentes), ou null se não tiver.',
+    type: String,
+    nullable: true,
+    example: 'c7d8e9f0-1a2b-4c3d-8e4f-5a6b7c8d9e0f',
+  })
+  driverId!: string | null;
 }
 
 export class LoginResponseDto {

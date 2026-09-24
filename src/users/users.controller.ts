@@ -46,6 +46,7 @@ import {
   UserCriadoRespostaDto,
   UserRemovidoRespostaDto,
   UserRespostaDto,
+  MeuPerfilRespostaDto,
 } from './dto/user-response.dto';
 import { UsersService } from './users.service';
 
@@ -147,10 +148,11 @@ export class UsersController {
     description:
       'Devolve os dados do próprio usuário autenticado (nunca senha/hash). Acesso: qualquer ' +
       'papel com a permissão `PROFILE_VIEW` (todos por padrão: ADMIN, FLEET_MANAGER, DRIVER).\n\n' +
-      '`x-database-tables`: lê `users`.',
-    ...({ 'x-database-tables': { read: ['users'] } } as Record<string, unknown>),
+      'Inclui `permissions` (códigos efetivos: papel + concedidas individualmente) e `driverId` (id do perfil de motorista ativo, ou null).\n\n' +
+      '`x-database-tables`: lê `users`, `role_permissions`, `user_permissions`, `drivers`.',
+    ...({ 'x-database-tables': { read: ['users', 'role_permissions', 'user_permissions', 'drivers'] } } as Record<string, unknown>),
   })
-  @ApiResponse({ status: 200, description: 'Perfil do usuário logado.', type: UserRespostaDto })
+  @ApiResponse({ status: 200, description: 'Perfil do usuário logado.', type: MeuPerfilRespostaDto })
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 403, description: 'Usuário autenticado não tem a permissão PROFILE_VIEW.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   buscarMeuPerfil(@CurrentUser() usuario: UsuarioLogado) {
@@ -335,27 +337,31 @@ export class UsersController {
   @ApiOperation({
     summary: 'Atualiza parcialmente um usuário',
     description:
-      'Atualiza só os campos enviados (fullName, roleId, isActive). E-mail e senha não entram aqui. ' +
-      'Acesso: quem tiver a permissão `USER_UPDATE` (ADMIN tem por papel; outros papéis podem receber via delegação granular).\n\n' +
-      '`x-database-tables`: lê `users`, `roles` (se `roleId` vier); escreve em `users`.',
+      'Atualiza só os campos enviados (fullName, isActive). E-mail, senha e papel não entram aqui: o papel (`roleId`) só muda por `PATCH /users/:id/role` (enviar `roleId` aqui devolve 400). ' +
+      'Acesso: quem tiver a permissão `USER_UPDATE` (ADMIN tem por papel; outros papéis podem receber via delegação granular). ' +
+      'Proteção de contas ADMIN: quem não é ADMIN nunca mexe em conta ADMIN (403, mesmo com a permission delegada); ' +
+      'ADMIN não desativa (`isActive=false`) outro ADMIN (403) nem a si mesmo (409), mas pode editar `fullName` e reativar.\n\n' +
+      '`x-database-tables`: lê `users`; escreve em `users`.',
     ...({
-      'x-database-tables': { read: ['users', 'roles'], write: ['users'] },
+      'x-database-tables': { read: ['users'], write: ['users'] },
     } as Record<string, unknown>),
   })
   @ApiParam({ name: 'id', description: 'Id do usuário (UUID).', format: 'uuid' })
   @ApiBody({ type: UpdateUserDto })
   @ApiResponse({ status: 200, description: 'Usuário atualizado.', type: UserRespostaDto })
-  @ApiResponse({ status: 400, description: 'Corpo inválido ou `roleId` inexistente.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 400, description: 'Corpo inválido (inclui `roleId`, que não é aceito aqui).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Sem permission, não-ADMIN mexendo em conta ADMIN, ou ADMIN desativando outro ADMIN.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Usuário não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 409, description: 'ADMIN tentou desativar a própria conta.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   atualizarParcial(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dados: UpdateUserDto,
     // fullName é opcional no PATCH; o NomePipe deixa passar quando não vem.
     @Body('fullName', NomePipe) _fullName: string | undefined,
+    @CurrentUser() usuario: UsuarioLogado,
   ) {
-    return this.servicoUsers.atualizarParcial(id, dados);
+    return this.servicoUsers.atualizarParcial(id, dados, usuario);
   }
 
   @Put(':id')
@@ -364,28 +370,33 @@ export class UsersController {
   @ApiOperation({
     summary: 'Substitui um usuário',
     description:
-      'Substitui todos os campos editáveis (fullName, roleId, isActive são obrigatórios). ' +
-      'E-mail e senha não entram aqui. Acesso: quem tiver a permissão `USER_UPDATE` (ADMIN tem por papel; ' +
-      'outros papéis podem receber via delegação granular).\n\n' +
-      '`x-database-tables`: lê `users`, `roles`; escreve em `users`.',
+      'Substitui todos os campos editáveis (fullName e isActive são obrigatórios). ' +
+      'E-mail, senha e papel não entram aqui: o papel (`roleId`) só muda por `PATCH /users/:id/role` (enviar `roleId` aqui devolve 400). ' +
+      ' Acesso: quem tiver a permissão `USER_UPDATE` (ADMIN tem por papel; ' +
+      'outros papéis podem receber via delegação granular). ' +
+      'Proteção de contas ADMIN: quem não é ADMIN nunca mexe em conta ADMIN (403, mesmo com a permission delegada); ' +
+      'ADMIN não desativa (`isActive=false`) outro ADMIN (403) nem a si mesmo (409), mas pode editar `fullName` e reativar.\n\n' +
+      '`x-database-tables`: lê `users`; escreve em `users`.',
     ...({
-      'x-database-tables': { read: ['users', 'roles'], write: ['users'] },
+      'x-database-tables': { read: ['users'], write: ['users'] },
     } as Record<string, unknown>),
   })
   @ApiParam({ name: 'id', description: 'Id do usuário (UUID).', format: 'uuid' })
   @ApiBody({ type: ReplaceUserDto })
   @ApiResponse({ status: 200, description: 'Usuário substituído.', type: UserRespostaDto })
-  @ApiResponse({ status: 400, description: 'Corpo inválido ou `roleId` inexistente.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 400, description: 'Corpo inválido (inclui `roleId`, que não é aceito aqui).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Sem permission, não-ADMIN mexendo em conta ADMIN, ou ADMIN desativando outro ADMIN.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Usuário não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 409, description: 'ADMIN tentou desativar a própria conta.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   substituir(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dados: ReplaceUserDto,
     // Roda separado só pela validação; os dados de verdade vêm de dados.
     @Body('fullName', NomePipe) _fullName: string,
+    @CurrentUser() usuario: UsuarioLogado,
   ) {
-    return this.servicoUsers.substituir(id, dados);
+    return this.servicoUsers.substituir(id, dados, usuario);
   }
 
   @Delete(':id')
@@ -396,7 +407,8 @@ export class UsersController {
     description:
       'Marca `deletedAt` no usuário; a linha continua no banco e pode ser restaurada ' +
       'em `PATCH /users/:id/restore`. Acesso: quem tiver a permissão `USER_DELETE` (ADMIN tem por papel; ' +
-      'outros papéis podem receber via delegação granular).\n\n' +
+      'outros papéis podem receber via delegação granular). ' +
+      'Proteção de contas ADMIN: não-ADMIN nunca remove conta ADMIN (403); ADMIN não remove outro ADMIN (403) nem a si mesmo (409).\n\n' +
       '`x-database-tables`: lê `users`; escreve em `users`.',
     ...({
       'x-database-tables': { read: ['users'], write: ['users'] },
@@ -406,10 +418,14 @@ export class UsersController {
   @ApiResponse({ status: 204, description: 'Usuário removido (sem corpo de resposta).' })
   @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Sem permission, alvo ADMIN e chamador não-ADMIN, ou ADMIN removendo outro ADMIN.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Usuário não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  async remover(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.servicoUsers.remover(id);
+  @ApiResponse({ status: 409, description: 'ADMIN tentou remover a própria conta.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  async remover(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() usuario: UsuarioLogado,
+  ): Promise<void> {
+    await this.servicoUsers.remover(id, usuario);
   }
 
   @Patch(':id/restore')
@@ -419,7 +435,8 @@ export class UsersController {
     summary: 'Restaura um usuário removido',
     description:
       'Limpa `deletedAt`, revertendo o soft delete. Acesso: quem tiver a permissão `USER_RESTORE` ' +
-      '(ADMIN tem por papel; outros papéis podem receber via delegação granular).\n\n' +
+      '(ADMIN tem por papel; outros papéis podem receber via delegação granular). ' +
+      'Proteção de contas ADMIN: só um ADMIN restaura conta ADMIN (403 para os demais).\n\n' +
       '`x-database-tables`: lê `users`; escreve em `users`.',
     ...({
       'x-database-tables': { read: ['users'], write: ['users'] },
@@ -429,10 +446,13 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'Usuário restaurado.', type: UserRespostaDto })
   @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Sem permission, ou alvo ADMIN e chamador não-ADMIN.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Usuário não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  restaurar(@Param('id', ParseUUIDPipe) id: string) {
-    return this.servicoUsers.restaurar(id);
+  restaurar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() usuario: UsuarioLogado,
+  ) {
+    return this.servicoUsers.restaurar(id, usuario);
   }
 
   // Irreversível: apaga a linha de verdade do banco (hard delete).
@@ -443,7 +463,7 @@ export class UsersController {
     summary: 'Remove um usuário permanentemente (hard delete)',
     description:
       'Apaga a linha de verdade do banco — irreversível, diferente do `DELETE /users/:id` ' +
-      '(soft delete). Acesso: ADMIN.\n\n' +
+      '(soft delete). Acesso: ADMIN. Proteção de contas ADMIN: não apaga outro ADMIN (403) nem a si mesmo (409).\n\n' +
       '`x-database-tables`: lê `users`; escreve (apaga) em `users`.',
     ...({
       'x-database-tables': { read: ['users'], write: ['users'] },
@@ -453,12 +473,13 @@ export class UsersController {
   @ApiResponse({ status: 204, description: 'Usuário apagado definitivamente (sem corpo de resposta).' })
   @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Não é ADMIN, ou tentou apagar outro ADMIN.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Usuário não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 409, description: 'Usuário tem motorista vinculado, ou registrou viagens, abastecimentos, manutenções ou incidentes. O histórico de auditoria NÃO bloqueia: as linhas de audit_logs permanecem com autor nulo.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 409, description: 'Tentou apagar a própria conta; ou usuário tem motorista vinculado, ou registrou viagens, abastecimentos, manutenções ou incidentes. O histórico de auditoria NÃO bloqueia: as linhas de audit_logs permanecem com autor nulo.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   async removerPermanentemente(
     @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() usuario: UsuarioLogado,
   ): Promise<void> {
-    await this.servicoUsers.removerPermanentemente(id);
+    await this.servicoUsers.removerPermanentemente(id, usuario);
   }
 }

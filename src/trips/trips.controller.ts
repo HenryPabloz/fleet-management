@@ -294,8 +294,9 @@ export class TripsController {
     description: 'Timeout ou rate limit ao consultar a API do ViaCEP para resolver `startLocation`/`endLocation`.',
     schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
-  criar(@Body() dados: CreateTripDto, @CurrentUser() usuario: UsuarioLogado) {
-    return this.servicoTrips.criar(dados, usuario.userId);
+  async criar(@Body() dados: CreateTripDto, @CurrentUser() usuario: UsuarioLogado) {
+    const escopo = await this.resolverEscopoDoUsuario(usuario);
+    return this.servicoTrips.criar(dados, usuario.userId, escopo);
   }
 
   @Patch(':id/start')

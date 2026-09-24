@@ -18,6 +18,7 @@ import {
   normalizarPaginacao,
   ResultadoPaginado,
 } from '../common/utils/paginacao.util';
+import { buscarCodigosEfetivos, buscarDriverIdAtivo } from '../common/utils/perfil-logado.util';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ReplaceUserDto } from './dto/replace-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -317,41 +318,69 @@ export class UsersService {
     }
   }
 
-  async atualizarParcial(id: string, dados: UpdateUserDto) {
-    await this.buscarPorId(id);
-
-    if (dados.roleId) {
-      await this.validarRoleId(dados.roleId);
+  // Protege contas ADMIN. Quem não é ADMIN nunca mexe nelas; ADMIN não
+  // desativa/apaga outro ADMIN nem a si mesmo (enfraquece = desativar/apagar).
+  private async protegerContaAdmin(
+    id: string,
+    quem: UsuarioLogado,
+    enfraquece: boolean,
+  ): Promise<void> {
+    const alvo = await this.servicoPrisma.user.findUnique({
+      where: { id },
+      include: { role: true },
+    });
+    if (!alvo) {
+      throw new NotFoundException('User not found');
     }
+    if (alvo.role.name !== 'ADMIN') {
+      return;
+    }
+    const papelDeQuem = await this.servicoPrisma.role.findUnique({
+      where: { id: quem.roleId },
+    });
+    if (papelDeQuem?.name !== 'ADMIN') {
+      throw new ForbiddenException('Only an ADMIN can modify another ADMIN account');
+    }
+    if (!enfraquece) {
+      return;
+    }
+    if (alvo.id === quem.userId) {
+      throw new ConflictException('You cannot deactivate or delete your own account');
+    }
+    throw new ForbiddenException('An ADMIN account cannot be deactivated or deleted');
+  }
+
+  async atualizarParcial(id: string, dados: UpdateUserDto, quem: UsuarioLogado) {
+    await this.buscarPorId(id);
+    await this.protegerContaAdmin(id, quem, dados.isActive === false);
 
     return this.servicoPrisma.user.update({
       where: { id },
       data: {
         fullName: dados.fullName,
-        roleId: dados.roleId,
         isActive: dados.isActive,
       },
       select: SELECAO_SEGURA,
     });
   }
 
-  async substituir(id: string, dados: ReplaceUserDto) {
+  async substituir(id: string, dados: ReplaceUserDto, quem: UsuarioLogado) {
     await this.buscarPorId(id);
-    await this.validarRoleId(dados.roleId);
+    await this.protegerContaAdmin(id, quem, dados.isActive === false);
 
     return this.servicoPrisma.user.update({
       where: { id },
       data: {
         fullName: dados.fullName,
-        roleId: dados.roleId,
         isActive: dados.isActive,
       },
       select: SELECAO_SEGURA,
     });
   }
 
-  async remover(id: string): Promise<void> {
+  async remover(id: string, quem: UsuarioLogado): Promise<void> {
     await this.buscarPorId(id);
+    await this.protegerContaAdmin(id, quem, true);
     await this.servicoSoftDelete.removerLogicamente('user', id);
 
     // Propaga o soft delete pro Driver vinculado, se houver um ainda ativo.
@@ -364,13 +393,8 @@ export class UsersService {
     }
   }
 
-  async restaurar(id: string) {
-    const usuario = await this.servicoPrisma.user.findUnique({
-      where: { id },
-    });
-    if (!usuario) {
-      throw new NotFoundException('User not found');
-    }
+  async restaurar(id: string, quem: UsuarioLogado) {
+    await this.protegerContaAdmin(id, quem, false);
 
     // Mesma seleção segura das outras rotas de User: nunca devolve password/apiKey.
     return this.servicoSoftDelete.restaurar('user', id, SELECAO_SEGURA);
@@ -408,13 +432,8 @@ export class UsersService {
     );
   }
 
-  async removerPermanentemente(id: string): Promise<void> {
-    const usuario = await this.servicoPrisma.user.findUnique({
-      where: { id },
-    });
-    if (!usuario) {
-      throw new NotFoundException('User not found');
-    }
+  async removerPermanentemente(id: string, quem: UsuarioLogado): Promise<void> {
+    await this.protegerContaAdmin(id, quem, true);
 
     // Busca sem filtro de soft delete: a FK tem ON DELETE CASCADE e apagaria
     // o Driver (ativo ou soft-deletado) junto, sem aviso. Bloqueamos antes.
@@ -453,8 +472,12 @@ export class UsersService {
 
   // GET /users/me: mesmo formato seguro de buscarPorId, mas pelo id de quem
   // está logado (não é um parâmetro de rota livre).
+  // Devolve também as permissões efetivas e o driverId (null se não for motorista).
   async buscarMeuPerfil(userId: string) {
-    return this.buscarPorId(userId);
+    const usuario = await this.buscarPorId(userId);
+    const permissions = await buscarCodigosEfetivos(this.servicoPrisma, userId, usuario.roleId);
+    const driverId = await buscarDriverIdAtivo(this.servicoPrisma, userId);
+    return { ...usuario, permissions, driverId };
   }
 
   // PATCH /users/me: só fullName. E-mail/senha/roleId/isActive não entram

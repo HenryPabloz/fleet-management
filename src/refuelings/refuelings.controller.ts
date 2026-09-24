@@ -87,6 +87,18 @@ export class RefuelingsController {
     private servicoPermissions: PermissionsService,
   ) {}
 
+  // Diz se o usuário vê tudo (REFUELING_VIEW_ALL) ou só o próprio.
+  private async resolverEscopoDoUsuario(usuario: UsuarioLogado) {
+    const codigos = await this.servicoPermissions.obterCodigosEfetivos(
+      usuario.userId,
+      usuario.roleId,
+    );
+    return {
+      userId: usuario.userId,
+      temPermissaoViewAll: codigos.includes('REFUELING_VIEW_ALL'),
+    };
+  }
+
   @Get()
   @Permissions('REFUELING_VIEW_OWN', 'REFUELING_VIEW_ALL')
   @ApiOperation({
@@ -182,8 +194,9 @@ export class RefuelingsController {
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Abastecimento não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  buscarPorId(@Param('id', ParseUUIDPipe) id: string) {
-    return this.servicoRefuelings.buscarPorId(id);
+  async buscarPorId(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() usuario: UsuarioLogado) {
+    const escopo = await this.resolverEscopoDoUsuario(usuario);
+    return this.servicoRefuelings.buscarPorId(id, escopo);
   }
 
   @Post()
@@ -223,8 +236,9 @@ export class RefuelingsController {
     description: 'Motorista inativo, quilometragem informada menor que a atual do veículo, ou motorista não corresponde à viagem ativa do veículo.',
     schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
-  criar(@Body() dados: CreateRefuelingDto, @CurrentUser() usuario: UsuarioLogado) {
-    return this.servicoRefuelings.criar(dados, usuario.userId);
+  async criar(@Body() dados: CreateRefuelingDto, @CurrentUser() usuario: UsuarioLogado) {
+    const escopo = await this.resolverEscopoDoUsuario(usuario);
+    return this.servicoRefuelings.criar(dados, usuario.userId, escopo);
   }
 
   @Delete(':id')

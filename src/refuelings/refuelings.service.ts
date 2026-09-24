@@ -7,7 +7,7 @@ import {
   normalizarPaginacao,
   ResultadoPaginado,
 } from '../common/utils/paginacao.util';
-import { buscarDriverIdProprio } from '../common/utils/resolver-driver-proprio.util';
+import { buscarDriverIdProprio, garantirDriverIdProprio } from '../common/utils/resolver-driver-proprio.util';
 import { CreateRefuelingDto } from './dto/create-refueling.dto';
 
 @Injectable()
@@ -62,7 +62,12 @@ export class RefuelingsService {
     return montarPaginacao(dados, total, paginacao.page, paginacao.pageSize);
   }
 
-  async buscarPorId(id: string) {
+  // Com escopo e sem REFUELING_VIEW_ALL, só o do próprio motorista (senão 404,
+  // igual a "não existe"). Sem escopo (uso interno) devolve qualquer um.
+  async buscarPorId(
+    id: string,
+    escopoDoUsuario?: { userId: string; temPermissaoViewAll: boolean },
+  ) {
     const abastecimento =
       await this.servicoPrisma.comSoftDelete.refueling.findUnique({
         where: { id },
@@ -70,13 +75,30 @@ export class RefuelingsService {
     if (!abastecimento) {
       throw new NotFoundException('Refueling not found');
     }
+    if (escopoDoUsuario && !escopoDoUsuario.temPermissaoViewAll) {
+      const driverIdProprio = await buscarDriverIdProprio(
+        this.servicoPrisma,
+        escopoDoUsuario.userId,
+      );
+      if (!driverIdProprio || abastecimento.driverId !== driverIdProprio) {
+        throw new NotFoundException('Refueling not found');
+      }
+    }
     return abastecimento;
   }
 
   // register_refueling calcula o total_cost e atualiza a quilometragem do
   // veículo; não reimplementamos essa conta aqui.
-  async criar(dados: CreateRefuelingDto, idDoUsuario: string) {
+  async criar(
+    dados: CreateRefuelingDto,
+    idDoUsuario: string,
+    escopoDoUsuario?: { userId: string; temPermissaoViewAll: boolean },
+  ) {
     let idDoAbastecimentoCriado = '';
+
+    if (escopoDoUsuario) {
+      await garantirDriverIdProprio(this.servicoPrisma, escopoDoUsuario, dados.driverId);
+    }
 
     try {
       await this.servicoPrisma.$transaction(async (tx) => {

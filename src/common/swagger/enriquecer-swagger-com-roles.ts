@@ -14,8 +14,6 @@ const RESUMO_DOS_PAPEIS: Record<string, string> = {
 // As rotas que recebem roleId, com o schema e o corpo de exemplo de cada uma.
 const ROTAS_COM_ROLE = [
   { caminho: '/users', metodo: 'post', schema: 'CreateUserDto' },
-  { caminho: '/users/{id}', metodo: 'patch', schema: 'UpdateUserDto' },
-  { caminho: '/users/{id}', metodo: 'put', schema: 'ReplaceUserDto' },
   { caminho: '/users/{id}/role', metodo: 'patch', schema: 'TrocarRoleDto' },
 ];
 
@@ -54,9 +52,6 @@ function montarCorpoDeExemplo(schema: string, roleId: string, nomeDoPapel: strin
       corpoTroca.driver = { licenseNumber: '12345678900', licenseExpiry: '2030-08-30' };
     }
     return corpoTroca;
-  }
-  if (schema === 'ReplaceUserDto') {
-    return { fullName: `Usuário ${nomeDoPapel}`, roleId, isActive: true };
   }
   return { roleId };
 }
@@ -116,7 +111,7 @@ export async function enriquecerSwaggerComRoles(
 
     // Troca o UUID inventado do schema por um ID real (DRIVER, o mais seguro).
     const schemas = documento.components?.schemas as Record<string, any> | undefined;
-    for (const nome of ['CreateUserDto', 'UpdateUserDto', 'ReplaceUserDto', 'TrocarRoleDto']) {
+    for (const nome of ['CreateUserDto', 'TrocarRoleDto']) {
       const propriedade = schemas?.[nome]?.properties?.roleId;
       if (propriedade) {
         propriedade.example = idDoDriver;

@@ -16,6 +16,9 @@ import { garantirPastaDeUploads } from './../src/incidents/utils/upload-incident
 const SENHA = 'SenhaForte123';
 
 jest.setTimeout(60000);
+// Alguns testes chamam a API pública real do ViaCEP (sem mock), que às vezes devolve 5xx/502.
+// Até 2 novas tentativas absorvem essa oscilação externa; falha de verdade continua falhando.
+jest.retryTimes(2, { logErrorsBeforeRetry: true });
 
 // PNG 1x1 válido (poucos bytes), só para testar upload real de arquivo.
 const PNG_MINIMO = Buffer.from(

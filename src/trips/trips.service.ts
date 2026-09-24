@@ -10,7 +10,7 @@ import {
   normalizarPaginacao,
   ResultadoPaginado,
 } from '../common/utils/paginacao.util';
-import { buscarDriverIdProprio } from '../common/utils/resolver-driver-proprio.util';
+import { buscarDriverIdProprio, garantirDriverIdProprio } from '../common/utils/resolver-driver-proprio.util';
 import { CreateTripDto } from './dto/create-trip.dto';
 import { StartTripDto } from './dto/start-trip.dto';
 import { EndTripDto } from './dto/end-trip.dto';
@@ -103,8 +103,16 @@ export class TripsService {
 
   // create_trip valida motorista, CNH e veículo, e insere a viagem PLANNED reservando
   // o veículo (IN_USE). O startKm provisório é a quilometragem do veículo.
-  async criar(dados: CreateTripDto, idDoUsuario: string) {
+  async criar(
+    dados: CreateTripDto,
+    idDoUsuario: string,
+    escopoDoUsuario?: { userId: string; temPermissaoViewAll: boolean },
+  ) {
     let idDaViagemCriada = '';
+
+    if (escopoDoUsuario) {
+      await garantirDriverIdProprio(this.servicoPrisma, escopoDoUsuario, dados.driverId);
+    }
 
     // startLocation/endLocation chegam aqui como CEP (já validados pelo
     // @IsValidCep() do DTO). Resolvemos os dois na API do ViaCEP e gravamos o

@@ -13,6 +13,9 @@ import { dataFutura as dataFuturaIso } from './helpers/usuarios-e2e';
 const SENHA = 'SenhaForte123';
 
 jest.setTimeout(60000);
+// Alguns testes chamam a API pública real do ViaCEP (sem mock), que às vezes devolve 5xx/502.
+// Até 2 novas tentativas absorvem essa oscilação externa; falha de verdade continua falhando.
+jest.retryTimes(2, { logErrorsBeforeRetry: true });
 
 describe('Vehicles e Maintenances (e2e)', () => {
   let app: INestApplication<App>;

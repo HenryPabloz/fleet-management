@@ -255,23 +255,6 @@ describe('Analytics (e2e)', () => {
 
   describe('Cenário de dados reais: veículo, motorista, trips, abastecimento, incidente', () => {
     it('confere os 5 indicadores batendo com os dados inseridos', async () => {
-      // Totais da frota ANTES de inserir os dados de teste (base para o diff).
-      const consumoAntes = await autenticado(
-        tokenAdmin,
-        'get',
-        '/analytics/fleet/fuel-consumption',
-      ).expect(200);
-      const distanciaAntes = await autenticado(
-        tokenAdmin,
-        'get',
-        '/analytics/fleet/daily-distance',
-      ).expect(200);
-      const incidentesAntes = await autenticado(
-        tokenAdmin,
-        'get',
-        '/analytics/incidents/severity',
-      ).expect(200);
-
       const veiculo = await criarVeiculo(5000);
       const driver = await criarMotorista();
 
@@ -285,38 +268,31 @@ describe('Analytics (e2e)', () => {
       // 1 incidente LOW.
       await criarIncidente(driver.id, veiculo.id, 'LOW');
 
-      // 1. GET /analytics/fleet/fuel-consumption: totais da frota cresceram PELO MENOS
-      // o que inserimos (25 litros, 250 km). Diff exato não dá: os endpoints de frota
-      // somam TODOS os veículos, e outros arquivos de e2e rodam em paralelo (mesmo
-      // banco), podendo inserir refuelings/trips entre o "antes" e o "depois". Os
-      // endpoints escopados (3 e 4, por vehicleId/driverId) é que conferem valor exato.
-      const consumoDepois = await autenticado(
+      // 1. Frota: outras suites rodam em paralelo no mesmo banco e criam/apagam dados,
+      // então diff antes/depois é instável. Usamos só limites mínimos (nossos dados
+      // já estão lá) e a coerência litros/km. Os valores exatos ficam nos itens 3 e 4.
+      const consumo = await autenticado(
         tokenAdmin,
         'get',
         '/analytics/fleet/fuel-consumption',
       ).expect(200);
-      expect(consumoDepois.body.totalLiters - consumoAntes.body.totalLiters).toBeGreaterThanOrEqual(
-        25 - 1e-6,
+      expect(consumo.body.totalLiters).toBeGreaterThanOrEqual(25 - 1e-6);
+      expect(consumo.body.totalKm).toBeGreaterThanOrEqual(250);
+      expect(consumo.body.averageLitersPerKm).toBeCloseTo(
+        consumo.body.totalLiters / consumo.body.totalKm,
+        5,
       );
-      expect(consumoDepois.body.totalKm - consumoAntes.body.totalKm).toBeGreaterThanOrEqual(250);
 
-      // 2. GET /analytics/fleet/daily-distance: o dia de hoje cresceu pelo menos 250km
-      // (mesmo motivo acima: soma da frota inteira, sujeita a dados de outras suites).
-      const distanciaDepois = await autenticado(
+      // 2. Distância diária: a linha de hoje tem pelo menos os 250km das nossas viagens.
+      const distancia = await autenticado(
         tokenAdmin,
         'get',
         '/analytics/fleet/daily-distance',
       ).expect(200);
       const hoje = new Date().toISOString().slice(0, 10);
-      const linhaDeHojeAntes = distanciaAntes.body.find(
-        (linha: { date: string }) => linha.date === hoje,
-      );
-      const linhaDeHojeDepois = distanciaDepois.body.find(
-        (linha: { date: string }) => linha.date === hoje,
-      );
-      const totalKmHojeAntes = linhaDeHojeAntes ? linhaDeHojeAntes.totalKm : 0;
-      expect(linhaDeHojeDepois).toBeDefined();
-      expect(linhaDeHojeDepois.totalKm - totalKmHojeAntes).toBeGreaterThanOrEqual(250);
+      const linhaDeHoje = distancia.body.find((linha: { date: string }) => linha.date === hoje);
+      expect(linhaDeHoje).toBeDefined();
+      expect(linhaDeHoje.totalKm).toBeGreaterThanOrEqual(250);
 
       // 3. GET /analytics/vehicle/:id/efficiency: escopado ao veículo, número exato.
       const eficiencia = await autenticado(
@@ -346,20 +322,17 @@ describe('Analytics (e2e)', () => {
       expect(estatisticasDoMotorista.body.totalKmCompleted).toEqual(250);
       expect(estatisticasDoMotorista.body.incidentsCount).toEqual(1);
 
-      // 5. GET /analytics/incidents/severity: LOW cresceu pelo menos 1 (mesmo motivo:
-      // agregado da frota inteira, outras suites podem criar incidentes em paralelo).
-      const incidentesDepois = await autenticado(
+      // 5. Severidade global: LOW tem pelo menos o incidente que criamos.
+      const incidentes = await autenticado(
         tokenAdmin,
         'get',
         '/analytics/incidents/severity',
       ).expect(200);
-      const lowAntes =
-        incidentesAntes.body.find((linha: { severity: string }) => linha.severity === 'LOW')
-          ?.count ?? 0;
-      const lowDepois =
-        incidentesDepois.body.find((linha: { severity: string }) => linha.severity === 'LOW')
-          ?.count ?? 0;
-      expect(lowDepois - lowAntes).toBeGreaterThanOrEqual(1);
+      const linhaLow = incidentes.body.find(
+        (linha: { severity: string }) => linha.severity === 'LOW',
+      );
+      expect(linhaLow).toBeDefined();
+      expect(linhaLow.count).toBeGreaterThanOrEqual(1);
     });
   });
 

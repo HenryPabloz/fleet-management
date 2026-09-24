@@ -7,7 +7,7 @@ import {
   normalizarPaginacao,
   ResultadoPaginado,
 } from '../common/utils/paginacao.util';
-import { buscarDriverIdProprio } from '../common/utils/resolver-driver-proprio.util';
+import { buscarDriverIdProprio, garantirDriverIdProprio } from '../common/utils/resolver-driver-proprio.util';
 import { apagarFotoDoIncidente } from './utils/apagar-foto-incidente.util';
 import { CreateIncidentDto } from './dto/create-incident.dto';
 import { UpdateIncidentStatusDto } from './dto/update-incident-status.dto';
@@ -75,12 +75,26 @@ export class IncidentsService {
     return montarPaginacao(dados, total, paginacao.page, paginacao.pageSize);
   }
 
-  async buscarPorId(id: string) {
+  // Com escopo e sem INCIDENT_VIEW_ALL, só o incidente do próprio motorista
+  // (senão 404, igual a "não existe").
+  async buscarPorId(
+    id: string,
+    escopoDoUsuario?: { userId: string; temPermissaoViewAll: boolean },
+  ) {
     const incidente = await this.servicoPrisma.comSoftDelete.incident.findUnique({
       where: { id },
     });
     if (!incidente) {
       throw new NotFoundException('Incident not found');
+    }
+    if (escopoDoUsuario && !escopoDoUsuario.temPermissaoViewAll) {
+      const driverIdProprio = await buscarDriverIdProprio(
+        this.servicoPrisma,
+        escopoDoUsuario.userId,
+      );
+      if (!driverIdProprio || incidente.driverId !== driverIdProprio) {
+        throw new NotFoundException('Incident not found');
+      }
     }
     return incidente;
   }
@@ -90,8 +104,19 @@ export class IncidentsService {
     photoUrl: string | null,
     photoKey: string | null,
     idDoUsuario: string,
+    escopoDoUsuario?: { userId: string; temPermissaoViewAll: boolean },
   ) {
     let idDoIncidenteCriado = '';
+
+    // Se recusar, apaga a foto que o upload já gravou no disco.
+    if (escopoDoUsuario) {
+      try {
+        await garantirDriverIdProprio(this.servicoPrisma, escopoDoUsuario, dados.driverId);
+      } catch (erro) {
+        await apagarFotoDoIncidente(photoKey);
+        throw erro;
+      }
+    }
 
     let tripIdParametro: string | null = null;
     if (dados.tripId) {
