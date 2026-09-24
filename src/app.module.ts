@@ -12,6 +12,7 @@ import { ViaCepModule } from './external/viacep/via-cep.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { PermissionsModule } from './permissions/permissions.module';
+import { RolesModule } from './roles/roles.module';
 import { DriversModule } from './drivers/drivers.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { MaintenancesModule } from './maintenances/maintenances.module';
@@ -42,6 +43,7 @@ import { HealthModule } from './health/health.module';
     AuthModule,
     UsersModule,
     PermissionsModule,
+    RolesModule,
     DriversModule,
     VehiclesModule,
     MaintenancesModule,

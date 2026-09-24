@@ -53,7 +53,7 @@ export class CreateUserDto {
 
   // Só o ADMIN escolhe o papel; o /auth/signup público sempre cria DRIVER.
   @ApiProperty({
-    description: 'Identificador do papel (role) do usuário (UUID).',
+    description: 'Identificador do papel (role) do usuário (UUID). Os papéis também podem ser listados em GET /roles.',
     example: 'f1e2d3c4-b5a6-4978-8899-001122334455',
   })
   @IsUUID()

@@ -39,7 +39,7 @@ function montarCorpoDeExemplo(schema: string, roleId: string, nomeDoPapel: strin
 }
 
 function montarTabelaMarkdown(papeis: PapelDoBanco[]): string {
-  let tabela = '\n\n**IDs das roles deste ambiente**\n\n| Papel | roleId | O que pode fazer |\n|---|---|---|\n';
+  let tabela = '\n\n**IDs das roles deste ambiente** (os papéis também podem ser listados em `GET /roles`)\n\n| Papel | roleId | O que pode fazer |\n|---|---|---|\n';
   for (const papel of papeis) {
     let resumo = RESUMO_DOS_PAPEIS[papel.name];
     if (!resumo) {
