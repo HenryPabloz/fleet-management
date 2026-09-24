@@ -2,7 +2,7 @@ import {
   BadRequestException,
   GatewayTimeoutException,
   Injectable,
-  InternalServerErrorException,
+  BadGatewayException,
   Logger,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
@@ -102,7 +102,7 @@ export class ViaCepService {
       erroAxios?.code === 'ETIMEDOUT'
     ) {
       this.logger.error(`Erro de rede ao consultar ViaCEP: ${erroAxios.code}`);
-      return new InternalServerErrorException('Não foi possível conectar à API do ViaCEP');
+      return new BadGatewayException('Não foi possível conectar à API do ViaCEP');
     }
 
     const status = erroAxios?.response?.status;
@@ -114,11 +114,11 @@ export class ViaCepService {
 
     if (status !== undefined && status >= 500) {
       this.logger.error(`ViaCEP retornou erro de servidor: ${status}`);
-      return new InternalServerErrorException(`API do ViaCEP retornou erro (${status})`);
+      return new BadGatewayException(`API do ViaCEP retornou erro (${status})`);
     }
 
     this.logger.error(`Erro inesperado ao consultar ViaCEP: ${(erro as Error)?.message}`);
-    return new InternalServerErrorException('Erro inesperado ao consultar a API do ViaCEP');
+    return new BadGatewayException('Erro inesperado ao consultar a API do ViaCEP');
   }
 
   private limparMascara(cep: string): string {

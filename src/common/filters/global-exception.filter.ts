@@ -21,6 +21,8 @@ const SLUG_E_TITULO_POR_STATUS: Record<number, { slug: string; titulo: string }>
   [HttpStatus.CONFLICT]: { slug: 'conflict', titulo: 'Conflito com o estado atual' },
   [HttpStatus.TOO_MANY_REQUESTS]: { slug: 'too-many-requests', titulo: 'Excesso de requisições' },
   [HttpStatus.INTERNAL_SERVER_ERROR]: { slug: 'internal-error', titulo: 'Erro interno' },
+  [HttpStatus.BAD_GATEWAY]: { slug: 'upstream-error', titulo: 'Falha em serviço externo' },
+  [HttpStatus.GATEWAY_TIMEOUT]: { slug: 'upstream-timeout', titulo: 'Tempo esgotado em serviço externo' },
 };
 
 function slugETituloPadrao(status: number): { slug: string; titulo: string } {

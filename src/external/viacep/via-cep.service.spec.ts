@@ -1,7 +1,7 @@
 import {
   BadRequestException,
   GatewayTimeoutException,
-  InternalServerErrorException,
+  BadGatewayException,
 } from '@nestjs/common';
 import { ViaCepService } from './via-cep.service';
 
@@ -39,14 +39,14 @@ describe('ViaCepService.cepEhValido', () => {
     );
   });
 
-  it('propaga InternalServerErrorException em vez de devolver false (erro de rede do ViaCEP)', async () => {
+  it('propaga BadGatewayException em vez de devolver false (erro de rede do ViaCEP)', async () => {
     const servico = montarServico();
     jest
       .spyOn(servico, 'buscarPorCep')
-      .mockRejectedValue(new InternalServerErrorException('Não foi possível conectar à API do ViaCEP'));
+      .mockRejectedValue(new BadGatewayException('Não foi possível conectar à API do ViaCEP'));
 
     await expect(servico.cepEhValido('01310-100')).rejects.toBeInstanceOf(
-      InternalServerErrorException,
+      BadGatewayException,
     );
   });
 
