@@ -371,8 +371,8 @@ model AuditLog {
   entityId   String      @map("entity_id") @db.Uuid
   action     AuditAction
 
-  changedBy     String @map("fk_user_id") @db.Uuid
-  changedByUser User   @relation("changedBy", fields: [changedBy], references: [id])
+  changedBy     String? @map("fk_user_id") @db.Uuid
+  changedByUser User?   @relation("changedBy", fields: [changedBy], references: [id], onDelete: SetNull)
 
   oldValues Json? @map("old_values") @db.JsonB // vazio quando é CREATE
   newValues Json? @map("new_values") @db.JsonB
