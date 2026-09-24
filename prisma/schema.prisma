@@ -206,6 +206,7 @@ model Vehicle {
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
+  isActive Boolean @default(true) @map("is_active")
 
   @@index([status])
   @@index([deletedAt])
@@ -310,6 +311,7 @@ model Maintenance {
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
+  isActive Boolean @default(true) @map("is_active")
 
   @@index([vehicleId])
   @@index([status])
