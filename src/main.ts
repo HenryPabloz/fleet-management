@@ -72,7 +72,9 @@ async function bootstrap() {
   const cssDosCodigos =
     '.swagger-ui .opblock-description-wrapper .renderedMarkdown code {' +
     ' background: #0400e0 !important; color: #ffffff !important; font-weight: 700 !important;' +
-    ' padding: 2px 6px !important; border-radius: 4px !important; border: 1px solid #0400e0 !important; }';
+    ' padding: 2px 6px !important; border-radius: 4px !important; border: 1px solid #0400e0 !important; }' +
+    // No modo escuro do Swagger as células (td) das tabelas da descrição ficam cinza escuro (o tema só clareia parágrafos e cabeçalhos).
+    ' html.dark-mode .swagger-ui .opblock-description-wrapper .renderedMarkdown table td { color: #e4e6e6 !important; }';
   SwaggerModule.setup('api/docs', app, documento, { customCss: cssDosCodigos });
 
   await app.listen(porta);
