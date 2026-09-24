@@ -63,7 +63,6 @@ const permissoes = [
   { code: 'USER_DELETE', description: 'Delete user' },
   { code: 'USER_RESTORE', description: 'Restore user' },
   { code: 'USER_ROLE_PROMOTE', description: 'Promote user role' },
-  { code: 'USER_ROLE_DEMOTE', description: 'Demote user role' },
   { code: 'ROLE_MANAGE', description: 'Manage roles' },
   { code: 'PERMISSION_MANAGE', description: 'Manage permissions' },
   { code: 'AUDIT_VIEW', description: 'View audit logs' },
@@ -76,6 +75,7 @@ const permissoesObsoletas = [
   'MAINTENANCE_VIEW',
   'TRIP_CANCEL',
   'DRIVER_CREATE',
+  'USER_ROLE_DEMOTE',
 ];
 
 const papeis = [

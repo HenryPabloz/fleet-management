@@ -23,8 +23,8 @@ const REGRA_POR_SCHEMA: Record<string, string> = {
     '\n\n**Quem atribui o quê:** ADMIN atribui qualquer role; quem não é ADMIN (ex: FLEET_MANAGER) só cria `DRIVER` (senão 403). ' +
     'O exemplo `DRIVER` leva o bloco `driver` (obrigatório para essa role); as demais roles não levam `driver` (400 se enviado).',
   TrocarRoleDto:
-    '\n\n**Regras:** só ADMIN. Subir exige `USER_ROLE_PROMOTE`, descer exige `USER_ROLE_DEMOTE`. ADMIN não é rebaixado (403). ' +
-    'Ao virar `DRIVER` sem perfil de motorista, envie o bloco `driver` (o exemplo `DRIVER` mostra); nas outras roles `driver` não é aceito.',
+    '\n\n**Regras:** só ADMIN, com `USER_ROLE_PROMOTE`. Só promove (DRIVER < FLEET_MANAGER < ADMIN); papel igual ou menor dá 409 e ADMIN alvo dá 403. ' +
+    'Uma promoção errada não pode ser desfeita pela API. O corpo leva só `roleId` (enviar `driver` dá 400).',
 };
 
 // Sufixo sorteado a cada boot: o e-mail de exemplo nunca colide com uma conta já existente
@@ -46,13 +46,7 @@ function montarCorpoDeExemplo(schema: string, roleId: string, nomeDoPapel: strin
     }
     return corpo;
   }
-  if (schema === 'TrocarRoleDto') {
-    const corpoTroca: Record<string, unknown> = { roleId };
-    if (nomeDoPapel === 'DRIVER') {
-      corpoTroca.driver = { licenseNumber: '12345678900', licenseExpiry: '2030-08-30' };
-    }
-    return corpoTroca;
-  }
+  // TrocarRoleDto: só o roleId (a rota apenas promove).
   return { roleId };
 }
 
@@ -100,6 +94,10 @@ export async function enriquecerSwaggerComRoles(
       if (conteudo) {
         const exemplos: Record<string, unknown> = {};
         for (const papel of papeis) {
+          // Promoção nunca tem DRIVER como destino.
+          if (rota.schema === 'TrocarRoleDto' && papel.name === 'DRIVER') {
+            continue;
+          }
           exemplos[`Usuário ${papel.name}`] = {
             summary: `Usuário ${papel.name}`,
             value: montarCorpoDeExemplo(rota.schema, papel.id, papel.name),

@@ -8,7 +8,6 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
-  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -33,7 +32,6 @@ import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { ListVehicleQueryDto } from './dto/list-vehicle-query.dto';
 import { ListVehicleNotInUseQueryDto } from './dto/list-vehicle-not-in-use-query.dto';
-import { ReplaceVehicleDto } from './dto/replace-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 import { VehiclesService } from './vehicles.service';
 
@@ -359,40 +357,6 @@ export class VehiclesController {
     @Body() dados: UpdateVehicleDto,
   ) {
     return this.servicoVehicles.atualizarParcial(id, dados);
-  }
-
-  @Put(':id')
-  @Permissions('VEHICLE_UPDATE')
-  @HttpCode(200)
-  @ApiOperation({
-    summary: 'Substitui um veículo',
-    description:
-      'Substitui todos os campos editáveis (model, year, status, currentMileage, ' +
-      'lastMaintenanceKm são obrigatórios). `plate` não entra aqui, a placa não muda depois de ' +
-      'criada. `status` nunca aceita `IN_USE` via API (mesma regra do PATCH). Acesso: ADMIN, ' +
-      'FLEET_MANAGER.\n\n' +
-      '`x-database-tables`: lê `vehicles`; escreve em `vehicles`.',
-    ...({
-      'x-database-tables': { read: ['vehicles'], write: ['vehicles'] },
-    } as Record<string, unknown>),
-  })
-  @ApiParam({ name: 'id', description: 'Id do veículo (UUID).', format: 'uuid' })
-  @ApiBody({ type: ReplaceVehicleDto })
-  @ApiResponse({ status: 200, description: 'Veículo substituído.', schema: VEHICLE_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Corpo inválido ou violação de CHECK do banco.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 404, description: 'Veículo não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({
-    status: 409,
-    description: 'Tentativa de setar `status: IN_USE` direto, quilometragem menor que a atual, ou veículo com viagem ativa.',
-    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
-  })
-  substituir(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dados: ReplaceVehicleDto,
-  ) {
-    return this.servicoVehicles.substituir(id, dados);
   }
 
   @Delete(':id')

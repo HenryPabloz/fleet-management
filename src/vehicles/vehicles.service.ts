@@ -14,7 +14,6 @@ import {
   ResultadoPaginado,
 } from '../common/utils/paginacao.util';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
-import { ReplaceVehicleDto } from './dto/replace-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 
 // Traduz erro de escrita em vehicles (trigger RAISE EXCEPTION ou CHECK do banco)
@@ -178,25 +177,6 @@ export class VehiclesService {
   }
 
   async atualizarParcial(id: string, dados: UpdateVehicleDto) {
-    await this.buscarPorId(id);
-
-    try {
-      return await this.servicoPrisma.vehicle.update({
-        where: { id },
-        data: {
-          model: dados.model,
-          year: dados.year,
-          status: dados.status as Prisma.VehicleUpdateInput['status'],
-          currentMileage: dados.currentMileage,
-          lastMaintenanceKm: dados.lastMaintenanceKm,
-        },
-      });
-    } catch (erro) {
-      traduzirErroDeEscritaVeiculo(erro);
-    }
-  }
-
-  async substituir(id: string, dados: ReplaceVehicleDto) {
     await this.buscarPorId(id);
 
     try {

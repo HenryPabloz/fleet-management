@@ -205,20 +205,6 @@ describe('Vehicles e Maintenances (e2e)', () => {
       expect(resposta.body.model).toEqual('Fiat Strada Endurance');
     });
 
-    it('PUT /vehicles/:id substitui o veículo', async () => {
-      const resposta = await autenticado(tokenAdmin, 'put', `/vehicles/${idVeiculo}`)
-        .send({
-          model: 'Fiat Strada Volcano',
-          year: 2023,
-          status: 'AVAILABLE',
-          currentMileage: 2000,
-          lastMaintenanceKm: 0,
-        })
-        .expect(200);
-      expect(resposta.body.model).toEqual('Fiat Strada Volcano');
-      expect(resposta.body.currentMileage).toEqual(2000);
-    });
-
     it('DELETE /vehicles/:id faz soft delete', async () => {
       await autenticado(tokenAdmin, 'delete', `/vehicles/${idVeiculo}`).expect(204);
 
@@ -636,19 +622,6 @@ describe('Vehicles e Maintenances (e2e)', () => {
         .send({ description: 'Inspeção anual (revisada)' })
         .expect(200);
       expect(resposta.body.description).toEqual('Inspeção anual (revisada)');
-    });
-
-    it('PUT /maintenances/:id substitui a manutenção', async () => {
-      const resposta = await autenticado(tokenAdmin, 'put', `/maintenances/${idManutencao}`)
-        .send({
-          type: 'INSPECTION',
-          status: 'IN_PROGRESS',
-          scheduledDate: new Date().toISOString(),
-          description: 'Inspeção anual em andamento',
-          cost: 180,
-        })
-        .expect(200);
-      expect(resposta.body.status).toEqual('IN_PROGRESS');
     });
 
     it('DELETE /maintenances/:id faz soft delete', async () => {

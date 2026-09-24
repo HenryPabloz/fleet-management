@@ -8,7 +8,6 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
-  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -34,7 +33,6 @@ import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.sche
 import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
 import { CreateMaintenanceDto } from './dto/create-maintenance.dto';
 import { ListMaintenanceQueryDto } from './dto/list-maintenance-query.dto';
-import { ReplaceMaintenanceDto } from './dto/replace-maintenance.dto';
 import { UpdateMaintenanceDto } from './dto/update-maintenance.dto';
 import { MaintenancesService } from './maintenances.service';
 
@@ -248,44 +246,6 @@ export class MaintenancesController {
     @Body() dados: UpdateMaintenanceDto,
   ) {
     return this.servicoMaintenances.atualizarParcial(id, dados);
-  }
-
-  @Put(':id')
-  @Permissions('MAINTENANCE_UPDATE')
-  @HttpCode(200)
-  @ApiOperation({
-    summary: 'Substitui uma manutenção',
-    description:
-      'Substitui todos os campos editáveis (type, status, scheduledDate, description, cost são ' +
-      'obrigatórios; completedDate continua opcional, só existe depois que a manutenção termina). ' +
-      '`vehicleId` não entra aqui, o vínculo é fixo após criado. Mesma sincronia de conclusão do ' +
-      'PATCH quando `status` vira `COMPLETED`. Acesso: ADMIN, FLEET_MANAGER.\n\n' +
-      '`x-database-tables`: lê `maintenances`, `vehicles`; escreve em `maintenances` e, ' +
-      'condicionalmente, em `vehicles`.',
-    ...({
-      'x-database-tables': {
-        read: ['maintenances', 'vehicles'],
-        write: ['maintenances', 'vehicles'],
-      },
-    } as Record<string, unknown>),
-  })
-  @ApiParam({ name: 'id', description: 'Id da manutenção (UUID).', format: 'uuid' })
-  @ApiBody({ type: ReplaceMaintenanceDto })
-  @ApiResponse({ status: 200, description: 'Manutenção substituída.', schema: MAINTENANCE_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Corpo inválido ou violação de CHECK do banco.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 404, description: 'Manutenção não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({
-    status: 409,
-    description: 'Sincronia com o veículo falhou ao concluir a manutenção (ex: veículo com viagem ativa).',
-    schema: { $ref: getSchemaPath(ProblemDetailsDto) },
-  })
-  substituir(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dados: ReplaceMaintenanceDto,
-  ) {
-    return this.servicoMaintenances.substituir(id, dados);
   }
 
   @Delete(':id')

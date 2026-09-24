@@ -9,7 +9,6 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
-  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -36,7 +35,6 @@ import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.sche
 import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
 import { RegenerateApiKeyResponseDto } from '../auth/dto/regenerate-api-key-response.dto';
 import { CreateUserDto } from './dto/create-user.dto';
-import { ReplaceUserDto } from './dto/replace-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateMeuPerfilDto } from './dto/update-meu-perfil.dto';
 import { TrocarSenhaDto } from './dto/trocar-senha.dto';
@@ -268,35 +266,35 @@ export class UsersController {
     return this.servicoUsers.criar(dados, usuario);
   }
 
-  // Só ADMIN, e ainda exige a permission da direção (conferida no serviço).
+  // Só ADMIN com USER_ROLE_PROMOTE; só sobe de cargo.
   @Patch(':id/role')
   @Roles('ADMIN')
-  @Permissions('USER_ROLE_PROMOTE', 'USER_ROLE_DEMOTE')
+  @Permissions('USER_ROLE_PROMOTE')
   @HttpCode(200)
   @ApiOperation({
-    summary: 'Sobe ou desce o papel de um usuário',
+    summary: 'Promove o papel de um usuário',
     description:
-      'Troca o papel (`roleId`) de um usuário. Ranking: DRIVER < FLEET_MANAGER < ADMIN. Subir exige `USER_ROLE_PROMOTE`; ' +
-      'descer exige `USER_ROLE_DEMOTE` (ADMIN tem as duas por padrão). Acesso: somente ADMIN. ' +
-      'Regras: um ADMIN nunca é rebaixado (403); ninguém altera o próprio papel (409); o mesmo papel retorna 409; ' +
-      'ao virar DRIVER sem perfil de motorista o bloco `driver` é obrigatório (se já tem perfil, ele é mantido). ' +
+      'Só PROMOVE o papel (`roleId`). Ranking: DRIVER < FLEET_MANAGER < ADMIN; permitido: DRIVER→FLEET_MANAGER, DRIVER→ADMIN, FLEET_MANAGER→ADMIN. ' +
+      'Exige a permission `USER_ROLE_PROMOTE` (ADMIN tem por padrão). Acesso: somente ADMIN. ' +
+      'Regras: o mesmo papel ou um papel menor retorna 409 (rebaixar não é suportado); um ADMIN alvo retorna 403; ninguém altera o próprio papel (409). ' +
+      'ATENÇÃO: uma promoção feita por engano não pode ser desfeita pela API. ' +
       'A mudança vale na hora, inclusive para o JWT já emitido (o papel é lido do banco a cada requisição).\n\n' +
-      '`x-database-tables`: lê `users`, `roles`, `role_permissions`, `user_permissions`, `drivers`; escreve em `users` e, se criar perfil, em `drivers`.',
+      '`x-database-tables`: lê `users`, `roles`, `role_permissions`, `user_permissions`; escreve em `users`.',
     ...({
       'x-database-tables': {
-        read: ['users', 'roles', 'role_permissions', 'user_permissions', 'drivers'],
-        write: ['users', 'drivers'],
+        read: ['users', 'roles', 'role_permissions', 'user_permissions'],
+        write: ['users'],
       },
     } as Record<string, unknown>),
   })
   @ApiParam({ name: 'id', description: 'Id do usuário (UUID).', format: 'uuid' })
   @ApiBody({ type: TrocarRoleDto })
-  @ApiResponse({ status: 200, description: 'Papel alterado; traz `driver` se o perfil foi criado agora.', type: UserComMotoristaRespostaDto })
-  @ApiResponse({ status: 400, description: '`roleId` inexistente, `driver` ausente ao virar DRIVER sem perfil, ou `driver` com papel diferente de DRIVER.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 200, description: 'Papel promovido.', type: UserRespostaDto })
+  @ApiResponse({ status: 400, description: '`roleId` inexistente ou corpo inválido (inclui enviar `driver`, que não é mais aceito).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 403, description: 'Não é ADMIN, falta a permission da direção, ou tentou rebaixar um ADMIN.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 403, description: 'Não é ADMIN, falta a permission `USER_ROLE_PROMOTE`, ou o alvo é um ADMIN.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Usuário não encontrado (ou removido).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 409, description: 'Mudança da própria role, mesmo papel atual, ou CNH já cadastrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 409, description: 'Mudança da própria role, ou papel igual/menor ao atual (só é permitido subir).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   trocarRole(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dados: TrocarRoleDto,
@@ -362,41 +360,6 @@ export class UsersController {
     @CurrentUser() usuario: UsuarioLogado,
   ) {
     return this.servicoUsers.atualizarParcial(id, dados, usuario);
-  }
-
-  @Put(':id')
-  @Permissions('USER_UPDATE')
-  @HttpCode(200)
-  @ApiOperation({
-    summary: 'Substitui um usuário',
-    description:
-      'Substitui todos os campos editáveis (fullName e isActive são obrigatórios). ' +
-      'E-mail, senha e papel não entram aqui: o papel (`roleId`) só muda por `PATCH /users/:id/role` (enviar `roleId` aqui devolve 400). ' +
-      ' Acesso: quem tiver a permissão `USER_UPDATE` (ADMIN tem por papel; ' +
-      'outros papéis podem receber via delegação granular). ' +
-      'Proteção de contas ADMIN: quem não é ADMIN nunca mexe em conta ADMIN (403, mesmo com a permission delegada); ' +
-      'ADMIN não desativa (`isActive=false`) outro ADMIN (403) nem a si mesmo (409), mas pode editar `fullName` e reativar.\n\n' +
-      '`x-database-tables`: lê `users`; escreve em `users`.',
-    ...({
-      'x-database-tables': { read: ['users'], write: ['users'] },
-    } as Record<string, unknown>),
-  })
-  @ApiParam({ name: 'id', description: 'Id do usuário (UUID).', format: 'uuid' })
-  @ApiBody({ type: ReplaceUserDto })
-  @ApiResponse({ status: 200, description: 'Usuário substituído.', type: UserRespostaDto })
-  @ApiResponse({ status: 400, description: 'Corpo inválido (inclui `roleId`, que não é aceito aqui).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 403, description: 'Sem permission, não-ADMIN mexendo em conta ADMIN, ou ADMIN desativando outro ADMIN.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 404, description: 'Usuário não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 409, description: 'ADMIN tentou desativar a própria conta.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  substituir(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dados: ReplaceUserDto,
-    // Roda separado só pela validação; os dados de verdade vêm de dados.
-    @Body('fullName', NomePipe) _fullName: string,
-    @CurrentUser() usuario: UsuarioLogado,
-  ) {
-    return this.servicoUsers.substituir(id, dados, usuario);
   }
 
   @Delete(':id')

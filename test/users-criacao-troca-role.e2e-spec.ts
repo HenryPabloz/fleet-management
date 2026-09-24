@@ -212,37 +212,28 @@ describe('Users: criação com API key, USER_VIEW e troca de role (e2e)', () => 
       await autenticado(alvo.token, 'get', '/users').expect(200);
     });
 
-    it('desce FLEET_MANAGER para DRIVER: exige driver sem perfil, aceita com driver', async () => {
+    it('sobe FLEET_MANAGER para ADMIN (200)', async () => {
       const alvo = await novoUsuario('FLEET_MANAGER');
-
-      await trocarRole(tokenAdmin, alvo.id, { roleId: roleIds.DRIVER }).expect(400);
-      const semMudanca = await prisma.user.findUnique({ where: { id: alvo.id } });
-      expect(semMudanca?.roleId).toEqual(roleIds.FLEET_MANAGER);
-
-      const cnh = novaCnh();
-      const resposta = await trocarRole(tokenAdmin, alvo.id, {
-        roleId: roleIds.DRIVER,
-        driver: { licenseNumber: cnh, licenseExpiry: dataFutura() },
-      }).expect(200);
-      expect(resposta.body.roleId).toEqual(roleIds.DRIVER);
-      expect(resposta.body.driver.licenseNumber).toEqual(cnh);
+      const resposta = await trocarRole(tokenAdmin, alvo.id, { roleId: roleIds.ADMIN }).expect(200);
+      expect(resposta.body.roleId).toEqual(roleIds.ADMIN);
     });
 
-    it('desce para DRIVER sem bloco quando o perfil já existe (mantém o existente)', async () => {
-      const alvo = await novoUsuario('DRIVER');
-      await trocarRole(tokenAdmin, alvo.id, { roleId: roleIds.FLEET_MANAGER }).expect(200);
-      await trocarRole(tokenAdmin, alvo.id, { roleId: roleIds.DRIVER }).expect(200);
-
-      const motorista = await prisma.driver.findUnique({ where: { userId: alvo.id } });
-      expect(motorista?.id).toEqual(alvo.driverId);
+    it('descer de cargo dá 409 e a role não muda', async () => {
+      const gerente = await novoUsuario('FLEET_MANAGER');
+      const resposta = await trocarRole(tokenAdmin, gerente.id, { roleId: roleIds.DRIVER }).expect(409);
+      expect(JSON.stringify(resposta.body)).toContain('Roles can only be raised');
+      const noBanco = await prisma.user.findUnique({ where: { id: gerente.id } });
+      expect(noBanco?.roleId).toEqual(roleIds.FLEET_MANAGER);
     });
 
-    it('driver com papel diferente de DRIVER dá 400', async () => {
+    it('enviar o bloco driver dá 400 (não é mais aceito)', async () => {
       const alvo = await novoUsuario('DRIVER');
       await trocarRole(tokenAdmin, alvo.id, {
         roleId: roleIds.FLEET_MANAGER,
         driver: { licenseNumber: novaCnh(), licenseExpiry: dataFutura() },
       }).expect(400);
+      const noBanco = await prisma.user.findUnique({ where: { id: alvo.id } });
+      expect(noBanco?.roleId).toEqual(roleIds.DRIVER);
     });
 
     it('ADMIN não é rebaixado, nem por outro ADMIN (403)', async () => {
@@ -276,14 +267,14 @@ describe('Users: criação com API key, USER_VIEW e troca de role (e2e)', () => 
     it('FLEET_MANAGER e DRIVER dão 403 mesmo com as permissions de troca delegadas', async () => {
       const gerente = await novoUsuario('FLEET_MANAGER');
       const alvo = await novoUsuario('DRIVER');
-      for (const permissionCode of ['USER_ROLE_PROMOTE', 'USER_ROLE_DEMOTE']) {
+      for (const permissionCode of ['USER_ROLE_PROMOTE']) {
         await autenticado(tokenAdmin, 'post', `/users/${gerente.id}/permissions`)
           .send({ permissionCode })
           .expect(200);
       }
 
       await trocarRole(gerente.token, alvo.id, { roleId: roleIds.FLEET_MANAGER }).expect(403);
-      await trocarRole(alvo.token, gerente.id, { roleId: roleIds.DRIVER }).expect(403);
+      await trocarRole(alvo.token, gerente.id, { roleId: roleIds.ADMIN }).expect(403);
 
       const noBanco = await prisma.user.findUnique({ where: { id: alvo.id } });
       expect(noBanco?.roleId).toEqual(roleIds.DRIVER);

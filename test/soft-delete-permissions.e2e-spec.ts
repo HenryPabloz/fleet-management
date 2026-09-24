@@ -240,9 +240,9 @@ describe('Permissions de soft delete/restore e isActive (e2e)', () => {
     }
   });
 
-  it('catálogo tem 44 permissions e as 13 do soft delete existem', async () => {
+  it('catálogo tem 43 permissions e as 13 do soft delete existem', async () => {
     const total = await prisma.permission.count();
-    expect(total).toBe(44);
+    expect(total).toBe(43);
     const resposta = await autenticado('get', '/permissions', tokenAdmin).expect(200);
     const codigos = resposta.body.map((item: { code: string }) => item.code);
     const novas = [
@@ -251,7 +251,7 @@ describe('Permissions de soft delete/restore e isActive (e2e)', () => {
       'MAINTENANCE_DELETE', 'MAINTENANCE_RESTORE', 'INCIDENT_DELETE', 'INCIDENT_RESTORE',
     ];
     expect(codigos).toEqual(expect.arrayContaining(novas));
-    expect(codigos.length).toBe(44);
+    expect(codigos.length).toBe(43);
   });
 
   const nomesRecursos = ['users', 'drivers', 'vehicles', 'trips', 'refuelings', 'maintenances', 'incidents'];

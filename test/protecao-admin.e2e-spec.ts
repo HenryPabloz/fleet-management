@@ -90,7 +90,7 @@ describe('Proteção de contas ADMIN (e2e)', () => {
   });
 
   describe('Gerente com permission delegada contra conta ADMIN: 403', () => {
-    it('PATCH, PUT, DELETE e restore devolvem 403 e o ADMIN continua ativo', async () => {
+    it('PATCH, DELETE e restore devolvem 403 e o ADMIN continua ativo', async () => {
       const gerente = await novoGerenteComPermissoes();
       const admin = await novoUsuario('ADMIN');
 
@@ -99,9 +99,6 @@ describe('Proteção de contas ADMIN (e2e)', () => {
         .expect(403);
       await autenticado(gerente.token, 'patch', `/users/${admin.id}`)
         .send({ fullName: 'Nome Novo' })
-        .expect(403);
-      await autenticado(gerente.token, 'put', `/users/${admin.id}`)
-        .send({ fullName: 'Nome Novo', isActive: false })
         .expect(403);
       await autenticado(gerente.token, 'delete', `/users/${admin.id}`).expect(403);
       await autenticado(gerente.token, 'patch', `/users/${admin.id}/restore`).expect(403);
@@ -128,23 +125,17 @@ describe('Proteção de contas ADMIN (e2e)', () => {
       await autenticado(gerente.token, 'patch', `/users/${alvo.id}`)
         .send({ fullName: 'Motorista Editado' })
         .expect(200);
-      await autenticado(gerente.token, 'put', `/users/${alvo.id}`)
-        .send({ fullName: 'Motorista Editado', isActive: false })
-        .expect(200);
       await autenticado(gerente.token, 'delete', `/users/${alvo.id}`).expect(204);
       await autenticado(gerente.token, 'patch', `/users/${alvo.id}/restore`).expect(200);
     });
   });
 
   describe('ADMIN contra outro ADMIN', () => {
-    it('desativar (PATCH e PUT), soft delete e hard delete dão 403', async () => {
+    it('desativar (PATCH), soft delete e hard delete dão 403', async () => {
       const outroAdmin = await novoUsuario('ADMIN');
 
       await autenticado(tokenAdmin, 'patch', `/users/${outroAdmin.id}`)
         .send({ isActive: false })
-        .expect(403);
-      await autenticado(tokenAdmin, 'put', `/users/${outroAdmin.id}`)
-        .send({ fullName: 'Admin Teste', isActive: false })
         .expect(403);
       await autenticado(tokenAdmin, 'delete', `/users/${outroAdmin.id}`).expect(403);
       await autenticado(tokenAdmin, 'delete', `/users/${outroAdmin.id}/permanent`).expect(403);
@@ -179,9 +170,6 @@ describe('Proteção de contas ADMIN (e2e)', () => {
 
       await autenticado(admin.token, 'patch', `/users/${admin.id}`)
         .send({ isActive: false })
-        .expect(409);
-      await autenticado(admin.token, 'put', `/users/${admin.id}`)
-        .send({ fullName: 'Admin Teste', isActive: false })
         .expect(409);
       await autenticado(admin.token, 'delete', `/users/${admin.id}`).expect(409);
       await autenticado(admin.token, 'delete', `/users/${admin.id}/permanent`).expect(409);

@@ -7,7 +7,6 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
-  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -30,7 +29,6 @@ import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
 import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
 import { DriverRespostaDto } from './dto/driver-response.dto';
-import { ReplaceDriverDto } from './dto/replace-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
 import { DriversService } from './drivers.service';
 
@@ -150,57 +148,28 @@ export class DriversController {
   @Permissions('DRIVER_UPDATE')
   @HttpCode(200)
   @ApiOperation({
-    summary: 'Atualiza parcialmente um motorista',
+    summary: 'Atualiza a validade da CNH de um motorista',
     description:
-      'Atualiza só os campos enviados (licenseNumber, licenseExpiry, isActive). `userId` não ' +
-      'entra aqui, o vínculo é fixo após criado. Acesso: ADMIN, FLEET_MANAGER (via permissão DRIVER_UPDATE).\n\n' +
-      '`x-database-tables`: lê `drivers`; escreve em `drivers`.',
-    ...({
-      'x-database-tables': { read: ['drivers', 'trips', 'refuelings', 'incidents'], write: ['drivers'] },
-    } as Record<string, unknown>),
-  })
-  @ApiParam({ name: 'id', description: 'Id do motorista (UUID).', format: 'uuid' })
-  @ApiBody({ type: UpdateDriverDto })
-  @ApiResponse({ status: 200, description: 'Motorista atualizado.', type: DriverRespostaDto })
-  @ApiResponse({ status: 400, description: 'Corpo inválido.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 409, description: 'Número da CNH já cadastrado para outro motorista.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  atualizarParcial(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dados: UpdateDriverDto,
-  ) {
-    return this.servicoDrivers.atualizarParcial(id, dados);
-  }
-
-  @Put(':id')
-  @Permissions('DRIVER_UPDATE')
-  @HttpCode(200)
-  @ApiOperation({
-    summary: 'Substitui um motorista',
-    description:
-      'Substitui todos os campos editáveis (licenseNumber, licenseExpiry, isActive são ' +
-      'obrigatórios). `userId` não entra aqui, o vínculo é fixo após criado. Acesso: ADMIN, ' +
-      'FLEET_MANAGER (via permissão DRIVER_UPDATE).\n\n' +
+      'Atualiza somente a data de validade da CNH (`licenseExpiry`, obrigatória e futura). O número da CNH não pode ser alterado; ' +
+      'para desativar o motorista use o soft delete (`DELETE /drivers/:id`). Enviar `licenseNumber`, `isActive` ou qualquer outro campo devolve 400. ' +
+      'Acesso: ADMIN, FLEET_MANAGER (via permissão DRIVER_UPDATE).\n\n' +
       '`x-database-tables`: lê `drivers`; escreve em `drivers`.',
     ...({
       'x-database-tables': { read: ['drivers'], write: ['drivers'] },
     } as Record<string, unknown>),
   })
   @ApiParam({ name: 'id', description: 'Id do motorista (UUID).', format: 'uuid' })
-  @ApiBody({ type: ReplaceDriverDto })
-  @ApiResponse({ status: 200, description: 'Motorista substituído.', type: DriverRespostaDto })
-  @ApiResponse({ status: 400, description: 'Corpo inválido.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiBody({ type: UpdateDriverDto })
+  @ApiResponse({ status: 200, description: 'Motorista atualizado.', type: DriverRespostaDto })
+  @ApiResponse({ status: 400, description: 'Corpo inválido: `licenseExpiry` ausente, mal formatada ou no passado, ou campos não permitidos.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Motorista não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 409, description: 'Número da CNH já cadastrado para outro motorista.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  substituir(
+  atualizarParcial(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dados: ReplaceDriverDto,
+    @Body() dados: UpdateDriverDto,
   ) {
-    return this.servicoDrivers.substituir(id, dados);
+    return this.servicoDrivers.atualizarParcial(id, dados);
   }
 
   @Delete(':id')

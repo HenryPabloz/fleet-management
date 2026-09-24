@@ -20,12 +20,10 @@ import {
 } from '../common/utils/paginacao.util';
 import { buscarCodigosEfetivos, buscarDriverIdAtivo } from '../common/utils/perfil-logado.util';
 import { CreateUserDto } from './dto/create-user.dto';
-import { ReplaceUserDto } from './dto/replace-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateMeuPerfilDto } from './dto/update-meu-perfil.dto';
 import { TrocarSenhaDto } from './dto/trocar-senha.dto';
 import { TrocarRoleDto } from './dto/trocar-role.dto';
-import { DadosMotoristaDto } from './dto/dados-motorista.dto';
 
 // Custo do bcrypt para as senhas.
 const CUSTO_BCRYPT = 10;
@@ -191,7 +189,7 @@ export class UsersService {
     }
   }
 
-  // Sobe ou desce o papel de um usuário (rota só de ADMIN com permission da direção).
+  // Só sobe o papel de um usuário (rota só de ADMIN com USER_ROLE_PROMOTE).
   async trocarRole(id: string, dados: TrocarRoleDto, quemTroca: UsuarioLogado) {
     const alvo = await this.servicoPrisma.comSoftDelete.user.findUnique({
       where: { id },
@@ -214,70 +212,31 @@ export class UsersService {
       throw new ConflictException('User already has this role');
     }
 
-    // ADMIN nunca é rebaixado, nem por outro ADMIN.
+    // ADMIN é o topo: nunca muda de papel, nem por outro ADMIN.
     if (alvo.role.name === 'ADMIN') {
       throw new ForbiddenException('An ADMIN cannot be demoted');
     }
 
+    // Só é permitido subir de cargo; igual ou menor é recusado.
     const nivelAtual = NIVEL_DO_PAPEL[alvo.role.name] ?? 0;
     const nivelNovo = NIVEL_DO_PAPEL[novoPapel.name] ?? 0;
-    let permissaoNecessaria = 'USER_ROLE_PROMOTE';
-    if (nivelNovo < nivelAtual) {
-      permissaoNecessaria = 'USER_ROLE_DEMOTE';
+    if (nivelNovo <= nivelAtual) {
+      throw new ConflictException('Roles can only be raised; demotion is not supported');
     }
-    const temPermissao = await this.usuarioTemPermissao(quemTroca, permissaoNecessaria);
+    const temPermissao = await this.usuarioTemPermissao(quemTroca, 'USER_ROLE_PROMOTE');
     if (!temPermissao) {
       throw new ForbiddenException('Insufficient permissions');
     }
 
-    // Só DRIVER leva perfil de motorista; se já existe um, ele é mantido.
-    let novoMotorista: DadosMotoristaDto | undefined;
-    if (novoPapel.name === 'DRIVER') {
-      const motoristaExistente = await this.servicoPrisma.driver.findUnique({
-        where: { userId: id },
+    // Grava o id de quem trocou para a auditoria.
+    return this.servicoPrisma.$transaction(async (transacao) => {
+      await transacao.$executeRaw`SELECT set_config('app.current_user_id', ${quemTroca.userId}::text, true)`;
+      return transacao.user.update({
+        where: { id },
+        data: { roleId: novoPapel.id },
+        select: SELECAO_SEGURA,
       });
-      if (!motoristaExistente) {
-        if (!dados.driver) {
-          throw new BadRequestException(
-            'driver block is required to become DRIVER when the user has no driver profile',
-          );
-        }
-        await this.validarDadosDoMotorista(dados.driver);
-        novoMotorista = dados.driver;
-      }
-    } else if (dados.driver) {
-      throw new BadRequestException(
-        'driver block is only allowed for the DRIVER role',
-      );
-    }
-
-    try {
-      return await this.servicoPrisma.$transaction(async (transacao) => {
-        await transacao.$executeRaw`SELECT set_config('app.current_user_id', ${quemTroca.userId}::text, true)`;
-        const usuario = await transacao.user.update({
-          where: { id },
-          data: { roleId: novoPapel.id },
-          select: SELECAO_SEGURA,
-        });
-        if (!novoMotorista) {
-          return usuario;
-        }
-        const motorista = await transacao.driver.create({
-          data: {
-            userId: id,
-            licenseNumber: novoMotorista.licenseNumber,
-            licenseExpiry: new Date(novoMotorista.licenseExpiry),
-          },
-          select: SELECAO_MOTORISTA,
-        });
-        return { ...usuario, driver: motorista };
-      });
-    } catch (erro) {
-      if (erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === 'P2002') {
-        throw new ConflictException('License number already registered');
-      }
-      throw erro;
-    }
+    });
   }
 
   // Permission vale se vier do papel ou tiver sido delegada ao usuário.
@@ -351,20 +310,6 @@ export class UsersService {
   }
 
   async atualizarParcial(id: string, dados: UpdateUserDto, quem: UsuarioLogado) {
-    await this.buscarPorId(id);
-    await this.protegerContaAdmin(id, quem, dados.isActive === false);
-
-    return this.servicoPrisma.user.update({
-      where: { id },
-      data: {
-        fullName: dados.fullName,
-        isActive: dados.isActive,
-      },
-      select: SELECAO_SEGURA,
-    });
-  }
-
-  async substituir(id: string, dados: ReplaceUserDto, quem: UsuarioLogado) {
     await this.buscarPorId(id);
     await this.protegerContaAdmin(id, quem, dados.isActive === false);
 

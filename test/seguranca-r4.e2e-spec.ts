@@ -11,7 +11,7 @@ import { criarUsuarioELogar, UsuarioCriado } from './helpers/usuarios-e2e';
 
 jest.setTimeout(120000);
 
-// Cobre: roleId fora de PATCH/PUT /users/:id, IDOR em refuelings/incidents/trips
+// Cobre: roleId fora de PATCH /users/:id, IDOR em refuelings/incidents/trips
 // (leitura e escrita) e permissions/driverId em /users/me e no login.
 describe('Segurança R4: roleId, IDOR e dados do usuário logado (e2e)', () => {
   let app: INestApplication<App>;
@@ -147,7 +147,7 @@ describe('Segurança R4: roleId, IDOR e dados do usuário logado (e2e)', () => {
     }
   });
 
-  describe('A. roleId não é aceito em PATCH/PUT /users/:id', () => {
+  describe('A. roleId não é aceito em PATCH /users/:id', () => {
     it('PATCH /users/:id com roleId dá 400 e a role não muda', async () => {
       const alvo = await novoUsuario('DRIVER');
       await autenticado(tokenAdmin, 'patch', `/users/${alvo.id}`)
@@ -157,30 +157,15 @@ describe('Segurança R4: roleId, IDOR e dados do usuário logado (e2e)', () => {
       expect(noBanco?.roleId).toEqual(roleIds['DRIVER']);
     });
 
-    it('PUT /users/:id com roleId dá 400; sem roleId funciona (200)', async () => {
-      const alvo = await novoUsuario('DRIVER');
-      await autenticado(tokenAdmin, 'put', `/users/${alvo.id}`)
-        .send({ fullName: 'Novo Nome', isActive: true, roleId: roleIds['ADMIN'] })
-        .expect(400);
-      const ok = await autenticado(tokenAdmin, 'put', `/users/${alvo.id}`)
-        .send({ fullName: 'Novo Nome', isActive: true })
-        .expect(200);
-      expect(ok.body.fullName).toEqual('Novo Nome');
-      expect(ok.body.roleId).toEqual(roleIds['DRIVER']);
-    });
-
-    it('ADMIN não rebaixa outro ADMIN por nenhum caminho (role 403, PATCH/PUT com roleId 400)', async () => {
+    it('ADMIN não rebaixa outro ADMIN por nenhum caminho (role 403, PATCH com roleId 400)', async () => {
       const outroAdmin = await novoUsuario('ADMIN');
       const admin2 = await novoUsuario('ADMIN');
 
       await autenticado(admin2.token, 'patch', `/users/${outroAdmin.id}/role`)
-        .send({ roleId: roleIds['DRIVER'], driver: { licenseNumber: '91234567890', licenseExpiry: '2030-01-01' } })
+        .send({ roleId: roleIds['DRIVER'] })
         .expect(403);
       await autenticado(admin2.token, 'patch', `/users/${outroAdmin.id}`)
         .send({ roleId: roleIds['DRIVER'] })
-        .expect(400);
-      await autenticado(admin2.token, 'put', `/users/${outroAdmin.id}`)
-        .send({ fullName: 'X Y', isActive: true, roleId: roleIds['DRIVER'] })
         .expect(400);
 
       const noBanco = await prisma.user.findUnique({ where: { id: outroAdmin.id } });
@@ -195,9 +180,6 @@ describe('Segurança R4: roleId, IDOR e dados do usuário logado (e2e)', () => {
 
       await autenticado(gerente.token, 'patch', `/users/${gerente.id}`)
         .send({ roleId: roleIds['ADMIN'] })
-        .expect(400);
-      await autenticado(gerente.token, 'put', `/users/${gerente.id}`)
-        .send({ fullName: 'Gerente Tentando', isActive: true, roleId: roleIds['ADMIN'] })
         .expect(400);
 
       const noBanco = await prisma.user.findUnique({ where: { id: gerente.id } });

@@ -3,7 +3,7 @@ import { Transform } from 'class-transformer';
 import { IsISO8601, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 import { IsValidCnh } from '../../common/validators/is-valid-cnh.validator';
 
-// Bloco `driver` de POST /users e PATCH /users/:id/role (perfil de motorista).
+// Bloco `driver` de POST /users (perfil de motorista).
 export class DadosMotoristaDto {
   @ApiProperty({
     description: 'Número da CNH (11 dígitos numéricos; único no sistema).',

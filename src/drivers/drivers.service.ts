@@ -11,7 +11,6 @@ import {
   normalizarPaginacao,
   ResultadoPaginado,
 } from '../common/utils/paginacao.util';
-import { ReplaceDriverDto } from './dto/replace-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
 
 @Injectable()
@@ -50,39 +49,18 @@ export class DriversService {
     return motorista;
   }
 
+  // Só a validade da CNH muda; data vencida é recusada (mesma regra da criação).
   async atualizarParcial(id: string, dados: UpdateDriverDto) {
     await this.buscarPorId(id);
 
-    if (dados.licenseNumber) {
-      await this.validarLicenseNumberLivre(dados.licenseNumber, id);
-    }
-
-    let licenseExpiry: Date | undefined;
-    if (dados.licenseExpiry) {
-      licenseExpiry = new Date(dados.licenseExpiry);
+    const novaValidade = new Date(dados.licenseExpiry);
+    if (novaValidade < new Date()) {
+      throw new BadRequestException('licenseExpiry cannot be in the past');
     }
 
     return this.servicoPrisma.driver.update({
       where: { id },
-      data: {
-        licenseNumber: dados.licenseNumber,
-        licenseExpiry,
-        isActive: dados.isActive,
-      },
-    });
-  }
-
-  async substituir(id: string, dados: ReplaceDriverDto) {
-    await this.buscarPorId(id);
-    await this.validarLicenseNumberLivre(dados.licenseNumber, id);
-
-    return this.servicoPrisma.driver.update({
-      where: { id },
-      data: {
-        licenseNumber: dados.licenseNumber,
-        licenseExpiry: new Date(dados.licenseExpiry),
-        isActive: dados.isActive,
-      },
+      data: { licenseExpiry: novaValidade },
     });
   }
 
@@ -140,17 +118,5 @@ export class DriversService {
     }
 
     await this.servicoSoftDelete.removerPermanentemente('driver', id);
-  }
-
-  private async validarLicenseNumberLivre(
-    licenseNumber: string,
-    idAtual: string,
-  ): Promise<void> {
-    const existente = await this.servicoPrisma.driver.findUnique({
-      where: { licenseNumber },
-    });
-    if (existente && existente.id !== idAtual) {
-      throw new ConflictException('License number already registered');
-    }
   }
 }

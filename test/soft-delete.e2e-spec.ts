@@ -261,6 +261,41 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
       expect(noBanco?.isActive).toBe(true);
     });
 
+    it('PATCH /drivers/:id atualiza só a validade da CNH (data futura)', async () => {
+      const antes = await prisma.driver.findUnique({ where: { id: idDriver } });
+      const resposta = await autenticado('patch', `/drivers/${idDriver}`)
+        .send({ licenseExpiry: '2032-05-20' })
+        .expect(200);
+      expect(resposta.body.licenseExpiry).toContain('2032-05-20');
+      expect(resposta.body.licenseNumber).toEqual(antes?.licenseNumber);
+    });
+
+    it('PATCH /drivers/:id recusa data vencida, corpo vazio, licenseNumber e isActive (400)', async () => {
+      await autenticado('patch', `/drivers/${idDriver}`).send({ licenseExpiry: '2001-01-01' }).expect(400);
+      await autenticado('patch', `/drivers/${idDriver}`).send({}).expect(400);
+      await autenticado('patch', `/drivers/${idDriver}`)
+        .send({ licenseExpiry: '2032-05-20', licenseNumber: novaCnh() })
+        .expect(400);
+      await autenticado('patch', `/drivers/${idDriver}`)
+        .send({ licenseExpiry: '2032-05-20', isActive: false })
+        .expect(400);
+      const noBanco = await prisma.driver.findUnique({ where: { id: idDriver } });
+      expect(noBanco?.isActive).toBe(true);
+    });
+
+    it('PATCH /drivers/:id de motorista inexistente dá 404', async () => {
+      await autenticado('patch', '/drivers/00000000-0000-4000-8000-000000000000')
+        .send({ licenseExpiry: '2032-05-20' })
+        .expect(404);
+    });
+
+    it('PUT foi removido de users, drivers, vehicles e maintenances (404)', async () => {
+      const idFalso = '00000000-0000-4000-8000-000000000000';
+      for (const recursoDaRota of ['users', 'drivers', 'vehicles', 'maintenances']) {
+        await autenticado('put', `/${recursoDaRota}/${idFalso}`).send({}).expect(404);
+      }
+    });
+
     it('DELETE /drivers/:id/permanent apaga de vez', async () => {
       await autenticado('delete', `/drivers/${idDriver}`).expect(204);
       await autenticado('delete', `/drivers/${idDriver}/permanent`).expect(204);

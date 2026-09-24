@@ -170,7 +170,7 @@ describe('Delegação granular de permissões (UserPermission) (e2e)', () => {
   it('GET /permissions (ADMIN) lista o catálogo completo', async () => {
     const resposta = await autenticado('get', '/permissions', tokenAdmin).expect(200);
     const codigos = resposta.body.map((item: { code: string }) => item.code);
-    expect(codigos).toEqual(expect.arrayContaining(['USER_VIEW', 'USER_CREATE', 'USER_UPDATE', 'USER_DELETE', 'USER_ROLE_PROMOTE', 'USER_ROLE_DEMOTE']));
+    expect(codigos).toEqual(expect.arrayContaining(['USER_VIEW', 'USER_CREATE', 'USER_UPDATE', 'USER_DELETE', 'USER_ROLE_PROMOTE']));
   });
 
   it('GET /permissions sem ser ADMIN dá 403', async () => {

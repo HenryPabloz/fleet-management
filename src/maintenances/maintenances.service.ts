@@ -14,7 +14,6 @@ import {
 } from '../common/utils/paginacao.util';
 import { traduzirErroDeEscritaVeiculo } from '../vehicles/vehicles.service';
 import { CreateMaintenanceDto } from './dto/create-maintenance.dto';
-import { ReplaceMaintenanceDto } from './dto/replace-maintenance.dto';
 import { UpdateMaintenanceDto } from './dto/update-maintenance.dto';
 
 // Manutenções que ainda contam como "o veículo está em manutenção".
@@ -155,47 +154,6 @@ export class MaintenancesService {
           scheduledDate: dados.scheduledDate
             ? new Date(dados.scheduledDate)
             : undefined,
-          completedDate,
-          description: dados.description,
-          cost: dados.cost,
-        },
-      });
-    } catch (erro) {
-      traduzirErroDeEscritaManutencao(erro);
-    }
-
-    if (dados.status === 'COMPLETED' && manutencao.status !== 'COMPLETED') {
-      await this.sincronizarVeiculoAposConclusao(manutencao.vehicleId, id);
-    }
-
-    return atualizada;
-  }
-
-  async substituir(id: string, dados: ReplaceMaintenanceDto) {
-    const manutencao = await this.buscarPorId(id);
-
-    let completedDate: Date | undefined;
-    if (dados.completedDate) {
-      completedDate = new Date(dados.completedDate);
-    }
-    if (dados.status === 'COMPLETED' && !completedDate) {
-      completedDate = new Date();
-    }
-
-    const scheduledDateFinal = new Date(dados.scheduledDate);
-    // Valida antes de tentar o UPDATE: não depende de capturar erro do banco.
-    if (completedDate && completedDate < scheduledDateFinal) {
-      throw new BadRequestException(MENSAGEM_COMPLETED_ANTES_DE_SCHEDULED);
-    }
-
-    let atualizada;
-    try {
-      atualizada = await this.servicoPrisma.maintenance.update({
-        where: { id },
-        data: {
-          type: dados.type as Prisma.MaintenanceUpdateInput['type'],
-          status: dados.status as Prisma.MaintenanceUpdateInput['status'],
-          scheduledDate: scheduledDateFinal,
           completedDate,
           description: dados.description,
           cost: dados.cost,
