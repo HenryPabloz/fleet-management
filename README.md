@@ -15,6 +15,7 @@ API REST em NestJS para gestão de veículos, motoristas, viagens, abastecimento
 - [Estrutura do projeto](#estrutura-do-projeto)
 - [Autenticação](#autenticação)
 - [Endpoints](#endpoints)
+- [Exclusão: soft delete e deleção total](#exclusão-soft-delete-e-deleção-total)
 - [Exemplos de uso (curl)](#exemplos-de-uso-curl)
 - [Formato de erro](#formato-de-erro)
 - [Swagger](#swagger)
@@ -24,8 +25,8 @@ API REST em NestJS para gestão de veículos, motoristas, viagens, abastecimento
 
 - **Autenticação em duas camadas**: cadastro público (`signup`) → login com e-mail + senha + API key → JWT para as rotas de negócio.
 - **RBAC** com 3 papéis (`DRIVER`, `FLEET_MANAGER`, `ADMIN`) e 29 permissões, aplicadas via guards nas rotas.
-- **Soft delete** em 7 models (users, drivers, vehicles, trips, refuelings, maintenances, incidents), com `restore` e exclusão permanente separada.
-- **Regras de negócio no banco**: procedures e triggers em PostgreSQL garantem integridade (ex: não permitir duas viagens ativas para o mesmo veículo/motorista, sincronizar quilometragem, auditoria append-only).
+- **Soft delete** em 7 models (users, drivers, vehicles, trips, refuelings, maintenances, incidents), com `restore` e exclusão permanente (deleção total) separada e exclusiva do `ADMIN`.
+- **Regras de negócio no banco**: procedures e triggers em PostgreSQL garantem integridade (ex: não permitir duas viagens ativas para o mesmo veículo/motorista, sincronizar quilometragem, auditoria append-only, com autor anonimizável).
 - **Integração com ViaCEP** (via `HttpService`) para validar/enriquecer o CEP da localização inicial de um veículo.
 - **Analytics/indicadores de frota**: consumo de combustível, distância diária, eficiência por veículo, viagens por motorista, incidentes por severidade.
 - **Upload local de arquivos**: foto opcional em incidentes, servida em `/uploads/*`.
@@ -109,6 +110,7 @@ O que acontece automaticamente:
 
 - O serviço `app` só inicia depois que o `postgres` fica `healthy` (`depends_on` com `condition: service_healthy`).
 - No start do container, o `CMD` do `Dockerfile` roda `npx prisma migrate deploy` antes de subir a aplicação — não é preciso aplicar as migrations manualmente.
+- O `Dockerfile` usa `COPY --chown` (sem `chown -R` em camada separada): build de ~4 min para ~1 min e imagem de 1.86 GB para 1.05 GB.
 - A pasta `uploads/` (fotos de incidentes) fica num volume Docker (`uploads_data`), então os arquivos sobrevivem a um rebuild do container.
 
 **Atenção à porta do banco:** fora do container (no seu PC) o Postgres está em `localhost:5433` (é o mapeamento definido no serviço `postgres`). Dentro da rede interna do compose, o serviço `app` enxerga o Postgres como `postgres:5432` (nome do serviço, porta interna padrão) — por isso o `DATABASE_URL` usado pelo container da API é diferente do valor em `.env.example`/`.env` (que é pensado pra rodar a API fora do Docker, contra a porta `5433` do host).
@@ -177,7 +179,7 @@ npm test
 npm run test:e2e
 ```
 
-No estado atual do repositório: `npm test` roda **1 suíte / 1 teste** (o teste unitário de `AppController`), e `npm run test:e2e` roda **8 suítes / 144 testes** (`analytics`, `app`, `auth-api-key`, `permissions-delegation`, `soft-delete`, `trips-refuelings-incidents`, `users-me-audit-logs`, `vehicles-maintenances`), cobrindo os fluxos de auth, RBAC, delegação granular de permissão (`UserPermission`), CRUD dos 7 recursos principais, soft delete, procedures/triggers, integração com ViaCEP, perfil próprio (`/users/me`) e auditoria (`/audit-logs`).
+No estado atual do repositório: `npm test` roda **1 suíte / 1 teste** (o teste unitário de `AppController`), e `npm run test:e2e` roda **10 suítes / 175 testes** (`analytics`, `app`, `auth-api-key`, `permissions-delegation`, `soft-delete`, `trips-refuelings-incidents`, `users-me-audit-logs`, `vehicles-maintenances`), cobrindo os fluxos de auth, RBAC, delegação granular de permissão (`UserPermission`), CRUD dos 7 recursos principais, soft delete, procedures/triggers, integração com ViaCEP, perfil próprio (`/users/me`) e auditoria (`/audit-logs`).
 
 ## Estrutura do projeto
 
@@ -246,7 +248,7 @@ Autenticação: **pública** (sem guard), **API key** (header `x-api-key`) ou **
 | POST | `/users` | ADMIN |
 | PATCH | `/users/:id` | ADMIN |
 | PUT | `/users/:id` | ADMIN |
-| DELETE | `/users/:id` | ADMIN |
+| DELETE | `/users/:id` | ADMIN (permissão `USER_DELETE`, por papel) |
 | PATCH | `/users/:id/restore` | ADMIN |
 | DELETE | `/users/:id/permanent` | ADMIN |
 
@@ -276,7 +278,7 @@ Autenticação: **pública** (sem guard), **API key** (header `x-api-key`) ou **
 | PUT | `/vehicles/:id` | ADMIN, FLEET_MANAGER |
 | DELETE | `/vehicles/:id` | ADMIN, FLEET_MANAGER |
 | PATCH | `/vehicles/:id/restore` | ADMIN, FLEET_MANAGER |
-| DELETE | `/vehicles/:id/permanent` | ADMIN, FLEET_MANAGER |
+| DELETE | `/vehicles/:id/permanent` | ADMIN |
 
 ### Trips (`/trips`)
 
@@ -317,7 +319,7 @@ Autenticação: **pública** (sem guard), **API key** (header `x-api-key`) ou **
 | PUT | `/maintenances/:id` | ADMIN, FLEET_MANAGER |
 | DELETE | `/maintenances/:id` | ADMIN, FLEET_MANAGER |
 | PATCH | `/maintenances/:id/restore` | ADMIN, FLEET_MANAGER |
-| DELETE | `/maintenances/:id/permanent` | ADMIN, FLEET_MANAGER |
+| DELETE | `/maintenances/:id/permanent` | ADMIN |
 
 ### Incidents (`/incidents`)
 
@@ -330,7 +332,7 @@ Autenticação: **pública** (sem guard), **API key** (header `x-api-key`) ou **
 | PATCH | `/incidents/:id/status` | ADMIN, FLEET_MANAGER |
 | DELETE | `/incidents/:id` | ADMIN, FLEET_MANAGER |
 | PATCH | `/incidents/:id/restore` | ADMIN, FLEET_MANAGER |
-| DELETE | `/incidents/:id/permanent` | ADMIN, FLEET_MANAGER |
+| DELETE | `/incidents/:id/permanent` | ADMIN |
 
 ### Analytics (`/analytics`)
 
@@ -357,13 +359,44 @@ Gestão da delegação granular de permissões (tabela `user_permissions`). Toda
 
 ### Audit logs (`/audit-logs`)
 
-Só leitura: `audit_logs` é append-only (trigger do banco bloqueia `UPDATE`/`DELETE` na tabela), não existe rota de escrita.
+Só leitura: `audit_logs` é append-only (trigger do banco bloqueia `DELETE` e qualquer `UPDATE`, exceto a anonimização do autor `fk_user_id` -> `NULL`), não existe rota de escrita. `changedBy` pode vir `null` (autor removido).
 
 | Método | Rota | Papéis |
 |---|---|---|
 | GET | `/audit-logs` | ADMIN (permissão `AUDIT_VIEW`, por papel); outros papéis só via delegação granular (`UserPermission`). Filtros opcionais `entityType`/`entityId`. |
 
 **Total: 78 rotas de negócio** nos 11 controllers acima (o `GET /` da raiz é só o placeholder padrão do `nest new`, e o `GET /health` é infraestrutura — nenhum dos dois faz parte da API de negócio). Nas tabelas acima, "Papéis" lista quem tem acesso **por papel** (`@Roles(...)`, fixo) ou **por permissão** (`@Permissions(...)`, que também aceita delegação granular via `UserPermission` — ver seção 5 de `projectDocs/projeto-fleet-management.md` para o detalhe de qual mecanismo cada rota usa).
+
+## Exclusão: soft delete e deleção total
+
+| Recurso | Soft delete (`DELETE /:id`) | Restore | Deleção total (`DELETE /:id/permanent`) |
+|---|---|---|---|
+| users | ADMIN (permissão `USER_DELETE`) | ADMIN | ADMIN |
+| drivers | ADMIN | ADMIN | ADMIN |
+| vehicles | ADMIN, FLEET_MANAGER | ADMIN, FLEET_MANAGER | ADMIN |
+| trips | ADMIN | ADMIN | ADMIN |
+| refuelings | ADMIN | ADMIN | ADMIN |
+| maintenances | ADMIN, FLEET_MANAGER | ADMIN, FLEET_MANAGER | ADMIN |
+| incidents | ADMIN, FLEET_MANAGER | ADMIN, FLEET_MANAGER | ADMIN |
+
+`DRIVER` nunca faz soft delete nem deleção total. A deleção total é **exclusiva do ADMIN** nos 7 recursos.
+
+Bloqueios legítimos (resposta `409` em RFC 7807, com `detail` explicando; nunca `500`):
+
+- **Usuário** com `Driver` vinculado, ou que registrou viagens, abastecimentos, manutenções ou incidentes (FK `RESTRICT`, decisão mantida).
+- **Motorista** com viagens, abastecimentos ou incidentes.
+- **Veículo** com viagens, abastecimentos, manutenções ou incidentes.
+- Qualquer outra FK residual cai num `409` genérico (rede de segurança no `SoftDeleteService`).
+
+**Viagem x incidentes:** `DELETE /trips/:id/permanent` só passa se **todos** os incidentes da viagem estiverem `RESOLVED`; senão retorna `409` ("Cannot permanently delete a trip with unresolved incidents. Resolve them first."). Quando passa, os incidentes resolvidos são apagados junto, na mesma transação (sem incidente órfão), e as fotos saem do disco após o commit.
+
+**Auditoria:** `audit_logs.fk_user_id` é anulável, com FK `ON DELETE SET NULL` (migration `20260924120000_anonymize_audit_logs_author`). O histórico de auditoria não impede mais a deleção total de um usuário: as linhas ficam com autor `NULL` (`changedBy: null` em `GET /audit-logs`, "usuário removido"). O trigger continua bloqueando `DELETE` e qualquer `UPDATE`, exceto a transição `fk_user_id` não nulo -> `NULL`.
+
+**Pendências e limitações conhecidas:**
+
+- **Não existe `GET /roles`.** Um front não consegue listar os papéis para um select; hoje os `roleId` só aparecem na descrição do Swagger. É pendência que depende de decisão do dono do projeto, não comportamento intencional.
+- O trigger de `audit_logs` permite `UPDATE fk_user_id -> NULL` em qualquer linha: quem tem acesso direto ao banco poderia anonimizar o autor de um registro.
+- `TRUNCATE audit_logs` não é bloqueado (já era assim antes). Sugestão: trigger de statement `BEFORE TRUNCATE`.
 
 ## Exemplos de uso (curl)
 
@@ -458,12 +491,14 @@ http://localhost:3000/api/docs
 
 (ajuste a porta se `PORT` for diferente de `3000`). Ela documenta todas as rotas de negócio, seus DTOs de entrada/saída, códigos de resposta possíveis e os dois esquemas de segurança (`jwt` para Bearer e `x-api-key` para API key).
 
+**IDs das roles no Swagger:** `POST /users`, `PATCH /users/:id` e `PUT /users/:id` mostram na descrição a tabela com os `roleId` reais do ambiente (lidos do banco no boot, por `src/common/swagger/enriquecer-swagger-com-roles.ts`) e 3 exemplos nomeados prontos para executar (DRIVER, FLEET_MANAGER, ADMIN). Os e-mails dos exemplos ganham sufixo aleatório a cada boot, para não colidir com contas existentes.
+
 ## Banco de dados
 
-PostgreSQL 15, modelado com Prisma (12 models + 9 enums), aplicado via **17 migrations**. As regras de integridade mais sensíveis vivem no banco, não só na aplicação:
+PostgreSQL 15, modelado com Prisma (12 models + 9 enums), aplicado via **18 migrations**. As regras de integridade mais sensíveis vivem no banco, não só na aplicação:
 
 - **6 procedures**: `create_trip`, `start_trip`, `end_trip`, `cancel_trip`, `register_incident`, `register_refueling`.
-- **12 triggers** (com suas 12 funções associadas), cobrindo auditoria append-only (`audit_logs`), sincronização de quilometragem/status do veículo a partir de viagens e abastecimentos, e bloqueios de concorrência (ex: impedir duas viagens ativas para o mesmo veículo ou motorista).
+- **12 triggers** (com suas 12 funções associadas), cobrindo auditoria append-only (`audit_logs`, com exceção só para anonimizar o autor), sincronização de quilometragem/status do veículo a partir de viagens e abastecimentos, e bloqueios de concorrência (ex: impedir duas viagens ativas para o mesmo veículo ou motorista).
 - **26 CHECK constraints**, validando formato de placa, CNH, e-mail, enums de status/severidade, faixas numéricas, entre outros.
 
-Contagens confirmadas diretamente no banco (`information_schema.routines`, `pg_trigger`, `pg_constraint`) nesta revisão do README.
+Contagens confirmadas diretamente no banco (`information_schema.routines`, `pg_trigger`, `pg_constraint`, `_prisma_migrations`) nesta revisão do README.
