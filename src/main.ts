@@ -64,6 +64,7 @@ async function bootstrap() {
     // Ordem das seções no Swagger.
     .addTag('auth')
     .addTag('roles')
+    .addTag('permissions')
     .addTag('users')
     .addTag('drivers')
     .addTag('vehicles')
@@ -72,7 +73,6 @@ async function bootstrap() {
     .addTag('maintenances')
     .addTag('incidents')
     .addTag('analytics')
-    .addTag('permissions')
     .addTag('audit-logs')
     .addTag('health')
     .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'jwt')
