@@ -14,7 +14,7 @@ import {
 } from 'class-validator';
 
 const TIPOS_ACEITOS = ['PREVENTIVE', 'CORRECTIVE', 'INSPECTION'] as const;
-const STATUS_ACEITOS = ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED'] as const;
+const STATUS_ACEITOS = ['SCHEDULED', 'IN_PROGRESS'] as const;
 
 export class CreateMaintenanceDto {
   // Vínculo fixo com o veículo; precisa existir e não estar soft-deletado.
@@ -28,7 +28,7 @@ export class CreateMaintenanceDto {
 
   @IsOptional()
   @IsIn(STATUS_ACEITOS)
-  @ApiPropertyOptional({ description: "Status. Padrão: SCHEDULED.", example: "SCHEDULED", enum: ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED'] })
+  @ApiPropertyOptional({ description: "Status. Padrão: SCHEDULED. Não é possível criar já como COMPLETED: conclua a manutenção via PATCH informando completedDate.", example: "SCHEDULED", enum: ['SCHEDULED', 'IN_PROGRESS'] })
   status?: (typeof STATUS_ACEITOS)[number];
 
   // IsISO8601 aceita data pura ou com hora, fica mais flexível.
