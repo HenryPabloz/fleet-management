@@ -37,7 +37,11 @@ const AUDIT_LOG_SCHEMA = {
   type: 'object',
   properties: {
     id: { type: 'string', format: 'uuid' },
-    entityType: { type: 'string', example: 'TRIP' },
+    entityType: {
+      type: 'string',
+      enum: ['TRIP', 'REFUELING', 'INCIDENT', 'USER', 'DRIVER', 'VEHICLE', 'MAINTENANCE'],
+      example: 'TRIP',
+    },
     entityId: { type: 'string', format: 'uuid' },
     action: { type: 'string', enum: ['CREATE', 'UPDATE', 'DELETE'], example: 'UPDATE' },
     changedBy: { type: 'string', format: 'uuid', nullable: true, description: 'Autor da alteração. null = usuário removido.' },
@@ -71,7 +75,14 @@ export class AuditLogsController {
   })
   @ApiQuery(QUERY_PAGE)
   @ApiQuery(QUERY_PAGE_SIZE)
-  @ApiQuery({ name: 'entityType', required: false, type: String, description: 'Filtra pelo tipo de entidade (ex: TRIP, VEHICLE, USER).' })
+  @ApiQuery({
+    name: 'entityType',
+    required: false,
+    type: String,
+    enum: ['TRIP', 'REFUELING', 'INCIDENT', 'USER', 'DRIVER', 'VEHICLE', 'MAINTENANCE'],
+    description: 'Filtra pelo tipo de entidade auditada.',
+    example: 'TRIP',
+  })
   @ApiQuery({ name: 'entityId', required: false, type: String, format: 'uuid', description: 'Filtra pelo id da entidade.' })
   @ApiResponse({
     status: 200,
