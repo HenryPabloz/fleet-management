@@ -10,15 +10,15 @@ const SEVERIDADES_ACEITAS = ['LOW', 'MEDIUM', 'HIGH'] as const;
 export class CreateIncidentDto {
   @IsOptional()
   @IsUUID()
-  @ApiPropertyOptional({ description: "Viagem relacionada (UUID). Opcional: o incidente pode ocorrer fora de viagem. Se informado, a viagem precisa estar IN_PROGRESS e ser do mesmo veículo e motorista.", example: "c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f" })
+  @ApiPropertyOptional({ description: "Viagem relacionada (UUID). Opcional: o incidente pode ocorrer fora de viagem. Se informado, a viagem precisa estar IN_PROGRESS e ser do mesmo veículo e motorista. Exemplo ilustrativo: substitua pelos dados reais antes de executar.", example: "00000000-0000-0000-0000-000000000000" })
   tripId?: string;
 
   @IsUUID()
-  @ApiProperty({ description: "Id do veículo (UUID). Fora de serviço é recusado.", example: "9f8e7d6c-5b4a-4c2d-8e0f-a1b2c3d4e5f6" })
+  @ApiProperty({ description: "Id do veículo (UUID). Fora de serviço é recusado. Exemplo ilustrativo: substitua pelos dados reais antes de executar.", example: "00000000-0000-0000-0000-000000000000" })
   vehicleId!: string;
 
   @IsUUID()
-  @ApiProperty({ description: "Id do motorista (UUID). Precisa estar ativo.", example: "b3c1a2e4-6f5d-4a8b-9c2e-1a2b3c4d5e6f" })
+  @ApiProperty({ description: "Id do motorista (UUID). Precisa estar ativo. Exemplo ilustrativo: substitua pelos dados reais antes de executar.", example: "00000000-0000-0000-0000-000000000000" })
   driverId!: string;
 
   @IsIn(TIPOS_ACEITOS)

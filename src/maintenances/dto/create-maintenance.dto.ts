@@ -19,7 +19,7 @@ const STATUS_ACEITOS = ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED'] as const;
 export class CreateMaintenanceDto {
   // Vínculo fixo com o veículo; precisa existir e não estar soft-deletado.
   @IsUUID()
-  @ApiProperty({ description: "Id do veículo (UUID). Precisa existir e não estar removido.", example: "9f8e7d6c-5b4a-4c2d-8e0f-a1b2c3d4e5f6" })
+  @ApiProperty({ description: "Id do veículo (UUID). Precisa existir e não estar removido. Exemplo ilustrativo: substitua pelos dados reais antes de executar.", example: "00000000-0000-0000-0000-000000000000" })
   vehicleId!: string;
 
   @IsIn(TIPOS_ACEITOS)

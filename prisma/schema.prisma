@@ -262,7 +262,7 @@ model Refueling {
   id String @id @default(uuid()) @map("id_refueling") @db.Uuid
 
   vehicleId String  @map("fk_vehicle_id") @db.Uuid
-  vehicle   Vehicle @relation(fields: [vehicleId], references: [id])
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
 
   driverId String @map("fk_driver_id") @db.Uuid
   driver   Driver @relation(fields: [driverId], references: [id])

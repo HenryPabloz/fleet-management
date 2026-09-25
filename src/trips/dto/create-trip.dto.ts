@@ -8,15 +8,17 @@ import { IsValidCep } from '../../common/validators/is-valid-cep.validator';
 // o endereço resolvido (ex: "São Paulo, SP") — ver TripsService.criar.
 export class CreateTripDto {
   @ApiProperty({
-    description: 'Id do motorista que vai fazer a viagem (UUID). Precisa estar ativo e com CNH válida.',
-    example: 'b3c1a2e4-6f5d-4a8b-9c2e-1a2b3c4d5e6f',
+    description: 'Id do motorista que vai fazer a viagem (UUID). Precisa estar ativo e com CNH válida.' +
+      ' Exemplo ilustrativo: substitua pelos dados reais antes de executar.',
+    example: '00000000-0000-0000-0000-000000000000',
   })
   @IsUUID()
   driverId!: string;
 
   @ApiProperty({
-    description: 'Id do veículo a usar na viagem (UUID). Precisa estar `AVAILABLE`.',
-    example: '9f8e7d6c-5b4a-3c2d-1e0f-a1b2c3d4e5f6',
+    description: 'Id do veículo a usar na viagem (UUID). Precisa estar `AVAILABLE`.' +
+      ' Exemplo ilustrativo: substitua pelos dados reais antes de executar.',
+    example: '00000000-0000-0000-0000-000000000000',
   })
   @IsUUID()
   vehicleId!: string;
@@ -25,8 +27,8 @@ export class CreateTripDto {
     description:
       'CEP brasileiro (com ou sem máscara) do ponto de partida. Precisa ser um CEP válido, ' +
       'confirmado contra a API real do ViaCEP — não aceita mais texto livre. O que é gravado no ' +
-      'banco é o endereço resolvido (ex: "São Paulo, SP"), não o CEP em si.',
-    example: '01310-100',
+      'banco é o endereço resolvido (ex: "São Paulo, SP"), não o CEP em si. O exemplo `00000-000` é fictício: use um CEP real.',
+    example: '00000-000',
   })
   @Transform(({ value }) => {
     if (typeof value === 'string') {
@@ -44,8 +46,8 @@ export class CreateTripDto {
     description:
       'CEP brasileiro (com ou sem máscara) do destino. Mesma regra do `startLocation`: precisa ' +
       'ser um CEP válido confirmado contra a API real do ViaCEP, e o que é gravado no banco é o ' +
-      'endereço resolvido (ex: "Campinas, SP"), não o CEP em si.',
-    example: '13010-141',
+      'endereço resolvido (ex: "Campinas, SP"), não o CEP em si. O exemplo `00000-000` é fictício: use um CEP real.',
+    example: '00000-000',
   })
   @Transform(({ value }) => {
     if (typeof value === 'string') {

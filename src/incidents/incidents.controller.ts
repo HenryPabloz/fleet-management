@@ -249,9 +249,9 @@ export class IncidentsController {
       type: 'object',
       required: ['vehicleId', 'driverId', 'type', 'severity', 'description'],
       properties: {
-        tripId: { type: 'string', format: 'uuid', nullable: true, description: 'Viagem relacionada (opcional; se informada, precisa estar IN_PROGRESS).', example: 'c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f' },
-        vehicleId: { type: 'string', format: 'uuid', example: '9f8e7d6c-5b4a-4c2d-8e0f-a1b2c3d4e5f6' },
-        driverId: { type: 'string', format: 'uuid', example: 'b3c1a2e4-6f5d-4a8b-9c2e-1a2b3c4d5e6f' },
+        tripId: { type: 'string', format: 'uuid', nullable: true, description: 'Viagem relacionada (opcional; se informada, precisa estar IN_PROGRESS). Exemplo ilustrativo: substitua pelos dados reais antes de executar.', example: '00000000-0000-0000-0000-000000000000' },
+        vehicleId: { type: 'string', format: 'uuid', example: '00000000-0000-0000-0000-000000000000' },
+        driverId: { type: 'string', format: 'uuid', example: '00000000-0000-0000-0000-000000000000' },
         type: { type: 'string', enum: ['ACCIDENT', 'MECHANICAL_FAILURE', 'OTHER'], example: 'MECHANICAL_FAILURE' },
         severity: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH'], example: 'MEDIUM' },
         description: { type: 'string', maxLength: 1000, example: 'Pane no motor durante a viagem' },

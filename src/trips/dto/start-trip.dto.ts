@@ -1,9 +1,3 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, Min } from 'class-validator';
-
-export class StartTripDto {
-  @IsInt()
-  @Min(0)
-  @ApiProperty({ description: "Leitura real do hodômetro ao sair. Não pode ser menor que a quilometragem atual do veículo (máx. 10.000.000). Vira o `startKm` da viagem e a quilometragem do veículo.", example: 15000 })
-  currentMileage!: number;
-}
+// Sem campos: o `startKm` é o hodômetro do veículo, que nunca vem do cliente.
+// Com forbidNonWhitelisted, qualquer campo enviado (ex: `currentMileage`) dá 400.
+export class StartTripDto {}

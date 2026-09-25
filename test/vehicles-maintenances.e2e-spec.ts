@@ -271,6 +271,48 @@ describe('Vehicles e Maintenances (e2e)', () => {
         .expect(409);
     });
 
+    it('PATCH /vehicles/:id com currentMileage maior em veículo livre dá 200', async () => {
+      const veiculo = await criarVeiculo({ currentMileage: 5000 });
+      const resposta = await autenticado(tokenAdmin, 'patch', `/vehicles/${veiculo.id}`)
+        .send({ currentMileage: 6000 })
+        .expect(200);
+      expect(resposta.body.currentMileage).toEqual(6000);
+    });
+
+    it('PATCH /vehicles/:id com currentMileage em veículo IN_USE dá 409 e o hodômetro não muda', async () => {
+      const veiculo = await criarVeiculo({ currentMileage: 5000 });
+      const usuarioMotorista = await autenticado(tokenAdmin, 'post', '/users')
+        .send({
+          email: novoEmail(),
+          password: SENHA,
+          fullName: 'Motorista Teste Hodometro',
+          roleId: roleIdDriver,
+          driver: { licenseNumber: novaCnh(), licenseExpiry: dataFuturaIso() },
+        })
+        .expect(201);
+      idsDeUsuarioParaLimpar.push(usuarioMotorista.body.id);
+      idsDeDriverParaLimpar.push(usuarioMotorista.body.driver.id);
+
+      const trip = await prisma.trip.create({
+        data: {
+          driverId: usuarioMotorista.body.driver.id,
+          vehicleId: veiculo.id,
+          status: 'PLANNED',
+          startKm: veiculo.currentMileage,
+          startLocation: 'São Paulo, SP',
+          endLocation: 'Rio de Janeiro, RJ',
+          createdBy: userIdAdmin,
+        },
+      });
+      idsDeTripParaLimpar.push(trip.id);
+
+      await autenticado(tokenAdmin, 'patch', `/vehicles/${veiculo.id}`)
+        .send({ currentMileage: 9000 })
+        .expect(409);
+      const noBanco = await prisma.vehicle.findUnique({ where: { id: veiculo.id } });
+      expect(noBanco?.currentMileage).toEqual(5000);
+    });
+
     it('POST /vehicles com placa duplicada dá 409', async () => {
       const veiculo = await criarVeiculo();
       await autenticado(tokenAdmin, 'post', '/vehicles')

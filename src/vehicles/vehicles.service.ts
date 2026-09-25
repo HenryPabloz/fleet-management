@@ -177,7 +177,14 @@ export class VehiclesService {
   }
 
   async atualizarParcial(id: string, dados: UpdateVehicleDto) {
-    await this.buscarPorId(id);
+    const veiculo = await this.buscarPorId(id);
+
+    // Veículo em viagem (IN_USE): a viagem ativa depende do hodômetro, então não editamos.
+    if (dados.currentMileage !== undefined && veiculo.status === 'IN_USE') {
+      throw new ConflictException(
+        'Cannot change the mileage of a vehicle that is in use (active trip). End or cancel the trip first.',
+      );
+    }
 
     try {
       return await this.servicoPrisma.vehicle.update({
@@ -244,18 +251,17 @@ export class VehiclesService {
       throw new NotFoundException('Vehicle not found');
     }
 
-    // Sem filtro de soft delete: a FK não tem ON DELETE CASCADE, mas preferimos
-    // uma mensagem clara em vez de deixar estourar erro de FK (23503).
-    const [temViagem, temAbastecimento, temManutencao, temIncidente] =
+    // Sem filtro de soft delete. Viagem/manutenção/incidente bloqueiam com mensagem clara;
+    // os abastecimentos são apagados junto pelo banco (FK com ON DELETE CASCADE).
+    const [temViagem, temManutencao, temIncidente] =
       await Promise.all([
         this.servicoPrisma.trip.findFirst({ where: { vehicleId: id } }),
-        this.servicoPrisma.refueling.findFirst({ where: { vehicleId: id } }),
         this.servicoPrisma.maintenance.findFirst({ where: { vehicleId: id } }),
         this.servicoPrisma.incident.findFirst({ where: { vehicleId: id } }),
       ]);
-    if (temViagem || temAbastecimento || temManutencao || temIncidente) {
+    if (temViagem || temManutencao || temIncidente) {
       throw new ConflictException(
-        'Cannot permanently delete a vehicle with associated trips, refuelings, maintenances or incidents.',
+        'Cannot permanently delete a vehicle with associated trips, maintenances or incidents.',
       );
     }
 

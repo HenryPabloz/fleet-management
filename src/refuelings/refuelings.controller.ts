@@ -60,7 +60,7 @@ const REFUELING_SCHEMA = {
     id: { type: 'string', format: 'uuid' },
     vehicleId: { type: 'string', format: 'uuid' },
     driverId: { type: 'string', format: 'uuid' },
-    mileage: { type: 'integer', example: 15230 },
+    mileage: { type: 'integer', example: 15230, description: 'Hodômetro do veículo no momento do registro (foto gravada pelo servidor; nunca vem do cliente). O abastecimento não altera o hodômetro.' },
     litersAdded: { type: 'number', example: 45.5 },
     costPerLiter: { type: 'number', example: 5.89 },
     totalCost: { type: 'number', example: 268.05, description: 'Calculado pela procedure (litersAdded x costPerLiter); nunca aceito do cliente.' },
@@ -205,23 +205,19 @@ export class RefuelingsController {
   @ApiOperation({
     summary: 'Registra um abastecimento',
     description:
-      'Regras: `mileage` (hodômetro; > 0 e não menor que a atual do veículo), `litersAdded` (> 0), `costPerLiter` (> 0) e `fuelType` (DIESEL, GASOLINE, ETHANOL, HYBRID); veículo fora de serviço é recusado; motorista precisa estar ativo e, se o veículo está em viagem ativa, ser o da viagem. ' +
+      'Regras: `litersAdded` (> 0), `costPerLiter` (> 0) e `fuelType` (DIESEL, GASOLINE, ETHANOL, HYBRID); veículo fora de serviço é recusado; motorista precisa estar ativo e, se o veículo está em viagem ativa, ser o da viagem. ' +
       'Chama a procedure `register_refueling`, que calcula `totalCost = round(litersAdded x ' +
-      'costPerLiter, 2)` e atualiza `vehicles.currentMileage` — `totalCost` não é aceito do cliente, ' +
-      'nem existe no corpo da requisição. Sem `PATCH`/`PUT`: abastecimento é registro histórico; ' +
-      'editar a quilometragem depois desincronizaria `vehicles.currentMileage` (o trigger de ' +
-      'sincronia dispara de novo em qualquer UPDATE de mileage). Corrigir um lançamento errado é ' +
+      'costPerLiter, 2)` e grava em `mileage` o hodômetro ATUAL do veículo naquele momento (foto/snapshot). O corpo NÃO tem `mileage` (o hodômetro nunca vem do cliente; enviar dá 400) e o abastecimento NÃO altera `vehicles.currentMileage` — ele só cresce pelas viagens. `totalCost` também não é aceito do cliente. Sem `PATCH`/`PUT`: abastecimento é registro histórico. Corrigir um lançamento errado é ' +
       'apagar (`DELETE`) e recriar, não editar. Acesso: ADMIN, FLEET_MANAGER, DRIVER.\n\n' +
       'Erros mais prováveis da procedure (SQLSTATE P0001, traduzidos para HTTP): veículo ou ' +
-      'motorista não encontrado (404), motorista inativo (409), quilometragem menor que a atual ' +
-      'do veículo (409), litros/preço fora do intervalo permitido (400), tipo de combustível ' +
+      'motorista não encontrado (404), motorista inativo (409), litros/preço fora do intervalo permitido (400), tipo de combustível ' +
       'inválido (400), motorista não corresponde à viagem ativa do veículo (409).\n\n' +
-      '`x-database-tables`: lê `drivers`, `vehicles`; escreve em `refuelings` e `vehicles` ' +
-      '(procedure `register_refueling`).',
+      '`x-database-tables`: lê `drivers`, `vehicles`; escreve só em `refuelings` ' +
+      '(procedure `register_refueling`; não escreve mais em `vehicles`).',
     ...({
       'x-database-tables': {
         read: ['drivers', 'vehicles'],
-        write: ['refuelings', 'vehicles'],
+        write: ['refuelings'],
       },
     } as Record<string, unknown>),
   })
@@ -233,7 +229,7 @@ export class RefuelingsController {
   @ApiResponse({ status: 404, description: '`vehicleId` ou `driverId` não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({
     status: 409,
-    description: 'Motorista inativo, quilometragem informada menor que a atual do veículo, ou motorista não corresponde à viagem ativa do veículo.',
+    description: 'Motorista inativo ou motorista não corresponde à viagem ativa do veículo.',
     schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   async criar(@Body() dados: CreateRefuelingDto, @CurrentUser() usuario: UsuarioLogado) {

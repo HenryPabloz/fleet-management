@@ -44,7 +44,7 @@ export class UpdateVehicleDto {
   @IsInt()
   @Min(0)
   @Max(10000000)
-  @ApiPropertyOptional({ description: "Nova quilometragem atual; não pode ser menor que a atual do veículo.", example: 16000 })
+  @ApiPropertyOptional({ description: "Nova quilometragem atual (hodômetro); não pode ser menor que a atual. Só é aceita se o veículo NÃO estiver IN_USE (409 se estiver).", example: 16000 })
   currentMileage?: number;
 
   @IsOptional()

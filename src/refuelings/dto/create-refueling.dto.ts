@@ -1,22 +1,17 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsIn, IsInt, IsNumber, IsPositive, IsUUID, Min } from 'class-validator';
+import { IsIn, IsNumber, IsPositive, IsUUID } from 'class-validator';
 
 const TIPOS_COMBUSTIVEL = ['DIESEL', 'GASOLINE', 'ETHANOL', 'HYBRID'] as const;
 
-// Sem totalCost: a procedure register_refueling calcula (litros x preço, arredondado).
+// Sem totalCost e sem mileage: a procedure calcula o total e grava o hodômetro atual do veículo.
 export class CreateRefuelingDto {
   @IsUUID()
-  @ApiProperty({ description: "Id do veículo abastecido (UUID). Veículo fora de serviço é recusado.", example: "9f8e7d6c-5b4a-4c2d-8e0f-a1b2c3d4e5f6" })
+  @ApiProperty({ description: "Id do veículo abastecido (UUID). Veículo fora de serviço é recusado. Exemplo ilustrativo: substitua pelos dados reais antes de executar.", example: "00000000-0000-0000-0000-000000000000" })
   vehicleId!: string;
 
   @IsUUID()
-  @ApiProperty({ description: "Id do motorista (UUID). Precisa estar ativo; se o veículo está em viagem ativa, tem de ser o motorista da viagem.", example: "b3c1a2e4-6f5d-4a8b-9c2e-1a2b3c4d5e6f" })
+  @ApiProperty({ description: "Id do motorista (UUID). Precisa estar ativo; se o veículo está em viagem ativa, tem de ser o motorista da viagem. Exemplo ilustrativo: substitua pelos dados reais antes de executar.", example: "00000000-0000-0000-0000-000000000000" })
   driverId!: string;
-
-  @IsInt()
-  @Min(1)
-  @ApiProperty({ description: "Hodômetro no abastecimento (> 0, até 10.000.000, não menor que a quilometragem atual do veículo). O veículo passa a ter essa quilometragem.", example: 15420 })
-  mileage!: number;
 
   @IsNumber()
   @IsPositive()

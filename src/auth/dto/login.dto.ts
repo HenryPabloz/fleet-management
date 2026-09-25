@@ -5,8 +5,8 @@ import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
 export class LoginDto {
   // Tira espaços das pontas antes de validar, senão " a@b.com" seria recusado.
   @ApiProperty({
-    description: 'E-mail cadastrado.',
-    example: 'motorista@fleet.com',
+    description: 'E-mail cadastrado. Exemplo ilustrativo: substitua pelos dados reais antes de executar.',
+    example: 'pessoa@exemplo.invalid',
   })
   @Transform(({ value }) => {
     if (typeof value === 'string') {
@@ -20,7 +20,7 @@ export class LoginDto {
   // Limite de 15 caracteres por decisão do projeto (senha curta, fácil de digitar).
   @ApiProperty({
     description: 'Senha em texto puro (mín. 8, máx. 15 caracteres).',
-    example: 'SenhaForte123',
+    example: 'senha-exemplo',
     minLength: 8,
     maxLength: 15,
   })

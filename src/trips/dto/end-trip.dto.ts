@@ -1,12 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsString, MaxLength, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class EndTripDto {
   @IsInt()
-  @Min(0)
-  @ApiProperty({ description: "Hodômetro ao chegar. Não pode ser menor que o `startKm` nem que a quilometragem atual do veículo (máx. 10.000.000). Distância = endMileage - startKm; o veículo passa a ter essa quilometragem e volta a AVAILABLE.", example: 15180 })
-  endMileage!: number;
+  @Min(1)
+  @Max(100000)
+  @ApiProperty({ description: "Quilômetros RODADOS na viagem (1 a 100.000). Não é leitura de hodômetro: o servidor soma esse valor ao hodômetro do veículo. O motorista informa a distância real, que pode diferir da estimada. Exemplo ilustrativo: substitua pelos dados reais antes de executar.", example: 120 })
+  endKm!: number;
 
   @Transform(({ value }) => {
     if (typeof value === 'string') {

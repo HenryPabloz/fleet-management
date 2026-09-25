@@ -27,7 +27,7 @@ export class CreateVehicleDto {
   @IsString()
   @Length(7, 8)
   @IsValidPlaca()
-  @ApiProperty({ description: "Placa (padrão antigo ABC1234 ou Mercosul ABC1D23). Única; não muda depois de criada.", example: "ABC1D23" })
+  @ApiProperty({ description: "Placa (padrão antigo ABC1234 ou Mercosul ABC1D23). Única; não muda depois de criada. Exemplo ilustrativo: substitua pelos dados reais antes de executar.", example: "AAA-0000" })
   plate!: string;
 
   @Transform(({ value }) => {
@@ -74,8 +74,8 @@ export class CreateVehicleDto {
       'CEP brasileiro (com ou sem máscara) da localização inicial do veículo. Se enviado, é ' +
       'validado contra a API real do ViaCEP e o endereço resolvido volta no campo ' +
       '`initialLocation` da resposta — não é persistido no banco (não existe coluna para isso ' +
-      'em `vehicles`).',
-    example: '01310-100',
+      'em `vehicles`). O exemplo `00000-000` é fictício: use um CEP real. Exemplo ilustrativo: substitua pelos dados reais antes de executar.',
+    example: '00000-000',
   })
   @IsOptional()
   @IsString()

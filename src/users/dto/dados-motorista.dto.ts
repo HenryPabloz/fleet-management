@@ -7,7 +7,7 @@ import { IsValidCnh } from '../../common/validators/is-valid-cnh.validator';
 export class DadosMotoristaDto {
   @ApiProperty({
     description: 'Número da CNH (11 dígitos numéricos; único no sistema).',
-    example: '12345678900',
+    example: '00000000000',
     maxLength: 20,
   })
   @Transform(({ value }) => {
@@ -23,8 +23,8 @@ export class DadosMotoristaDto {
   licenseNumber!: string;
 
   @ApiProperty({
-    description: 'Data de validade da CNH (ISO 8601). Não pode estar no passado.',
-    example: '2030-08-30',
+    description: 'Data de validade da CNH (ISO 8601). Não pode estar no passado. Exemplo ilustrativo: substitua pelos dados reais antes de executar.',
+    example: '2020-01-01',
   })
   @IsISO8601()
   licenseExpiry!: string;

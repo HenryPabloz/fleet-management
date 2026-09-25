@@ -199,17 +199,15 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
 
       // 2. PATCH /trips/:id/start (IN_PROGRESS)
       const tripIniciada = await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/start`)
-        .send({ currentMileage: 10050 })
         .expect(200);
       expect(tripIniciada.body.status).toEqual('IN_PROGRESS');
-      expect(tripIniciada.body.startKm).toEqual(10050);
+      expect(tripIniciada.body.startKm).toEqual(10000);
 
       // 3. POST /refuelings durante a viagem
       const refueling = await autenticado(tokenAdmin, 'post', '/refuelings')
         .send({
           vehicleId: veiculo.id,
           driverId: driver.id,
-          mileage: 10100,
           litersAdded: 40.5,
           costPerLiter: 5.899,
           fuelType: 'GASOLINE',
@@ -217,15 +215,25 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
         .expect(201);
       idsDeRefuelingParaLimpar.push(refueling.body.id);
       expect(Number(refueling.body.totalCost)).toBeCloseTo(238.9, 1);
+      // mileage = hodômetro do veículo no momento; o abastecimento não altera o hodômetro.
+      expect(refueling.body.mileage).toEqual(10000);
+      veiculoNoBanco = await prisma.vehicle.findUnique({ where: { id: veiculo.id } });
+      expect(veiculoNoBanco?.currentMileage).toEqual(10000);
 
       // 4. PATCH /trips/:id/end (COMPLETED, veículo volta AVAILABLE)
       const tripFinalizada = await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/end`)
-        .send({ endMileage: 10300, endLocation: 'Destino final E2E' })
+        .send({ endKm: 300, endLocation: 'Destino final E2E' })
         .expect(200);
       expect(tripFinalizada.body.status).toEqual('COMPLETED');
+      // No end, endKm do request = km rodados; na resposta endKm = hodômetro final.
+      expect(tripFinalizada.body.startKm).toEqual(10000);
+      expect(tripFinalizada.body.endKm).toEqual(10300);
+      expect(tripFinalizada.body.distanceKm).toEqual(300);
+      expect(tripFinalizada.body.endKm - tripFinalizada.body.startKm).toEqual(300);
 
       veiculoNoBanco = await prisma.vehicle.findUnique({ where: { id: veiculo.id } });
       expect(veiculoNoBanco?.status).toEqual('AVAILABLE');
+      expect(veiculoNoBanco?.currentMileage).toEqual(10300);
 
       // 5. POST /incidents com upload real de foto
       const incident = await autenticado(tokenAdmin, 'post', '/incidents')
@@ -301,7 +309,6 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
       idsDeTripParaLimpar.push(trip.body.id);
 
       await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/start`)
-        .send({ currentMileage: veiculo.currentMileage })
         .expect(200);
 
       await autenticado(tokenAdmin, 'delete', `/trips/${trip.body.id}`).expect(409);
@@ -351,7 +358,7 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
         .expect(400);
     });
 
-    it('start com leitura maior atualiza startKm da viagem e a quilometragem do veículo', async () => {
+    it('start sem corpo usa o hodômetro do veículo; o end soma os km rodados ao veículo', async () => {
       const veiculo = await criarVeiculo({ currentMileage: 5000 });
       const driver = await criarMotorista();
       const trip = await autenticado(tokenAdmin, 'post', '/trips')
@@ -360,21 +367,23 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
       idsDeTripParaLimpar.push(trip.body.id);
       expect(trip.body.startKm).toEqual(5000);
 
-      const iniciada = await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/start`)
-        .send({ currentMileage: 5120 })
-        .expect(200);
-      expect(iniciada.body.startKm).toEqual(5120);
-      const veiculoNoBanco = await prisma.vehicle.findUnique({ where: { id: veiculo.id } });
-      expect(veiculoNoBanco?.currentMileage).toEqual(5120);
+      const iniciada = await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/start`).expect(200);
+      expect(iniciada.body.startKm).toEqual(5000);
+      let veiculoNoBanco = await prisma.vehicle.findUnique({ where: { id: veiculo.id } });
+      expect(veiculoNoBanco?.currentMileage).toEqual(5000);
 
-      // end com km menor que o startKm é rejeitado
-      await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/end`)
-        .send({ endMileage: 5000, endLocation: 'Destino' })
-        .expect(400);
-      await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/cancel`).expect(200);
+      const finalizada = await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/end`)
+        .send({ endKm: 120, endLocation: 'Destino' })
+        .expect(200);
+      expect(finalizada.body.distanceKm).toEqual(120);
+      expect(finalizada.body.endKm).toEqual(5120);
+      expect(finalizada.body.endKm - finalizada.body.startKm).toEqual(120);
+      veiculoNoBanco = await prisma.vehicle.findUnique({ where: { id: veiculo.id } });
+      expect(veiculoNoBanco?.currentMileage).toEqual(5120);
+      expect(veiculoNoBanco?.status).toEqual('AVAILABLE');
     });
 
-    it('start com leitura menor que a quilometragem do veículo é rejeitado', async () => {
+    it('start com corpo antigo (currentMileage) dá 400 e a viagem continua PLANNED', async () => {
       const veiculo = await criarVeiculo({ currentMileage: 5000 });
       const driver = await criarMotorista();
       const trip = await autenticado(tokenAdmin, 'post', '/trips')
@@ -384,7 +393,32 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
 
       await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/start`)
         .send({ currentMileage: 4000 })
-        .expect(409);
+        .expect(400);
+      const noBanco = await prisma.trip.findUnique({ where: { id: trip.body.id } });
+      expect(noBanco?.status).toEqual('PLANNED');
+      await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/cancel`).expect(200);
+    });
+
+    it('end com endKm 0, negativo, > 100000 ou no formato antigo (endMileage) dá 400 e a viagem segue IN_PROGRESS', async () => {
+      const veiculo = await criarVeiculo({ currentMileage: 5000 });
+      const driver = await criarMotorista();
+      const trip = await autenticado(tokenAdmin, 'post', '/trips')
+        .send({ driverId: driver.id, vehicleId: veiculo.id, startLocation: '01310-100', endLocation: '20040-020' })
+        .expect(201);
+      idsDeTripParaLimpar.push(trip.body.id);
+      await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/start`).expect(200);
+
+      const invalidos = [
+        { endKm: 0, endLocation: 'Destino' },
+        { endKm: -5, endLocation: 'Destino' },
+        { endKm: 100001, endLocation: 'Destino' },
+        { endMileage: 5100, endLocation: 'Destino' },
+      ];
+      for (const corpo of invalidos) {
+        await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/end`).send(corpo).expect(400);
+      }
+      const noBanco = await prisma.trip.findUnique({ where: { id: trip.body.id } });
+      expect(noBanco?.status).toEqual('IN_PROGRESS');
       await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/cancel`).expect(200);
     });
 
@@ -457,7 +491,6 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
         .send({
           vehicleId: veiculo.id,
           driverId: driver.id,
-          mileage: veiculo.currentMileage + 50,
           litersAdded: 20,
           costPerLiter: 5,
           fuelType: 'DIESEL',
@@ -468,6 +501,26 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
       await autenticado(tokenAdmin, 'patch', `/refuelings/${refueling.body.id}`)
         .send({ mileage: 999999 })
         .expect(404);
+    });
+
+    it('POST /refuelings com mileage no corpo dá 400; sem mileage grava o hodômetro do veículo e não o altera', async () => {
+      const veiculo = await criarVeiculo({ currentMileage: 7000 });
+      const driver = await criarMotorista();
+      const corpo = {
+        vehicleId: veiculo.id,
+        driverId: driver.id,
+        litersAdded: 10,
+        costPerLiter: 5,
+        fuelType: 'DIESEL',
+      };
+
+      await autenticado(tokenAdmin, 'post', '/refuelings').send({ ...corpo, mileage: 7050 }).expect(400);
+
+      const criado = await autenticado(tokenAdmin, 'post', '/refuelings').send(corpo).expect(201);
+      idsDeRefuelingParaLimpar.push(criado.body.id);
+      expect(criado.body.mileage).toEqual(7000);
+      const veiculoNoBanco = await prisma.vehicle.findUnique({ where: { id: veiculo.id } });
+      expect(veiculoNoBanco?.currentMileage).toEqual(7000);
     });
   });
 
@@ -546,7 +599,6 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
         .send({
           vehicleId: veiculoA.id,
           driverId: driverA.id,
-          mileage: veiculoA.currentMileage + 50,
           litersAdded: 20,
           costPerLiter: 5,
           fuelType: 'DIESEL',
@@ -558,7 +610,6 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
         .send({
           vehicleId: veiculoB.id,
           driverId: driverB.id,
-          mileage: veiculoB.currentMileage + 50,
           litersAdded: 25,
           costPerLiter: 5.5,
           fuelType: 'GASOLINE',

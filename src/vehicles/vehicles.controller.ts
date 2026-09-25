@@ -65,7 +65,7 @@ const VEHICLE_SCHEMA = {
       enum: ['AVAILABLE', 'IN_USE', 'IN_MAINTENANCE', 'OUT_OF_SERVICE'],
       example: 'AVAILABLE',
     },
-    currentMileage: { type: 'integer', example: 15000 },
+    currentMileage: { type: 'integer', example: 15000, description: 'Hodômetro do veículo (km). Nunca vem de start/abastecimento: só cresce pelo fim das viagens (soma dos km rodados); pode ser informado na criação e editado por PATCH (só com o veículo fora de IN_USE).' },
     lastMaintenanceKm: { type: 'integer', example: 10000 },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
@@ -334,7 +334,7 @@ export class VehiclesController {
       'Atualiza só os campos enviados (model, year, status, currentMileage, lastMaintenanceKm). ' +
       '`plate` não entra aqui, a placa não muda depois de criada. `status` nunca aceita `IN_USE` ' +
       'via API (só as procedures de viagem setam esse status); um trigger do banco bloqueia essa ' +
-      'escrita direta. Acesso: ADMIN, FLEET_MANAGER.\n\n' +
+      'escrita direta. Editar `currentMileage` só é permitido se o veículo NÃO estiver `IN_USE` (409 se estiver: a viagem ativa depende do hodômetro); o trigger do banco também impede o hodômetro de diminuir (409). Acesso: ADMIN, FLEET_MANAGER.\n\n' +
       '`x-database-tables`: lê `vehicles`; escreve em `vehicles`.',
     ...({
       'x-database-tables': { read: ['vehicles'], write: ['vehicles'] },
@@ -349,7 +349,7 @@ export class VehiclesController {
   @ApiResponse({ status: 404, description: 'Veículo não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({
     status: 409,
-    description: 'Tentativa de setar `status: IN_USE` direto, quilometragem menor que a atual, ou veículo com viagem ativa.',
+    description: 'Tentativa de setar `status: IN_USE` direto, quilometragem menor que a atual, edição de `currentMileage` com o veículo IN_USE (viagem ativa), ou veículo com viagem ativa.',
     schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   atualizarParcial(
@@ -414,14 +414,14 @@ export class VehiclesController {
     summary: 'Remove um veículo permanentemente (hard delete)',
     description:
       'Apaga a linha de verdade do banco — irreversível, diferente do `DELETE /vehicles/:id` ' +
-      '(soft delete). Bloqueado se existir viagem, abastecimento, manutenção ou incidente ' +
-      'associado ao veículo (a FK não tem ON DELETE CASCADE). Acesso: ADMIN (FLEET_MANAGER só faz soft delete).\n\n' +
-      '`x-database-tables`: lê `vehicles`, `trips`, `refuelings`, `maintenances`, `incidents`; ' +
-      'escreve (apaga) em `vehicles`.',
+      '(soft delete). Bloqueado se existir viagem, manutenção ou incidente ' +
+      'associado ao veículo (409). Os abastecimentos NÃO bloqueiam: o banco os apaga junto (FK com ON DELETE CASCADE). Acesso: ADMIN (FLEET_MANAGER só faz soft delete).\n\n' +
+      '`x-database-tables`: lê `vehicles`, `trips`, `maintenances`, `incidents`; ' +
+      'escreve (apaga) em `vehicles` e, em cascata, `refuelings`.',
     ...({
       'x-database-tables': {
-        read: ['vehicles', 'trips', 'refuelings', 'maintenances', 'incidents'],
-        write: ['vehicles'],
+        read: ['vehicles', 'trips', 'maintenances', 'incidents'],
+        write: ['vehicles', 'refuelings'],
       },
     } as Record<string, unknown>),
   })
@@ -433,7 +433,7 @@ export class VehiclesController {
   @ApiResponse({ status: 404, description: 'Veículo não encontrado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({
     status: 409,
-    description: 'Veículo tem viagens, abastecimentos, manutenções ou incidentes associados.',
+    description: 'Veículo tem viagens, manutenções ou incidentes associados.',
     schema: { $ref: getSchemaPath(ProblemDetailsDto) },
   })
   async removerPermanentemente(

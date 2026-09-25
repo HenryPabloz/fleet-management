@@ -16,8 +16,8 @@ import {
 export class CreateUserDto {
   // O banco só aceita e-mail em minúsculas e sem espaços.
   @ApiProperty({
-    description: 'E-mail do usuário (único).',
-    example: 'motorista@fleet.com',
+    description: 'E-mail do usuário (único). Exemplo ilustrativo: substitua pelos dados reais antes de executar.',
+    example: 'pessoa@exemplo.invalid',
   })
   @Transform(({ value }) => {
     if (typeof value === 'string') {
@@ -32,7 +32,7 @@ export class CreateUserDto {
   // Limite de 15 caracteres por decisão do projeto (senha curta, fácil de digitar).
   @ApiProperty({
     description: 'Senha em texto puro (mín. 8, máx. 15 caracteres).',
-    example: 'SenhaForte123',
+    example: 'senha-exemplo',
     minLength: 8,
     maxLength: 15,
   })
@@ -55,8 +55,8 @@ export class CreateUserDto {
 
   // ADMIN atribui qualquer papel; quem não é ADMIN só cria DRIVER (regra no serviço).
   @ApiProperty({
-    description: 'Identificador do papel (role) do usuário (UUID). Os papéis também podem ser listados em GET /roles. ADMIN atribui qualquer papel; os demais só DRIVER.',
-    example: 'f1e2d3c4-b5a6-4978-8899-001122334455',
+    description: 'Identificador do papel (role) do usuário (UUID). Os papéis também podem ser listados em GET /roles. ADMIN atribui qualquer papel; os demais só DRIVER. Exemplo ilustrativo: substitua pelos dados reais antes de executar.',
+    example: '00000000-0000-0000-0000-000000000000',
   })
   @IsUUID()
   roleId!: string;

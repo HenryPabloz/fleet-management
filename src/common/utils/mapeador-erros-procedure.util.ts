@@ -27,14 +27,12 @@ const MENSAGENS_EXATAS: Record<string, number> = {
   'Vehicle is out of service': 409,
   'Trip not found or not in PLANNED status': 409,
   'Trip does not belong to the informed vehicle': 400,
-  'Current mileage exceeds the maximum allowed (10000000)': 400,
   'Trip not found or not in IN_PROGRESS status': 409,
-  'End mileage cannot be less than start mileage': 400,
+  'End km must be greater than zero': 400,
+  'End km exceeds the maximum allowed (100000)': 400,
   'End mileage exceeds the maximum allowed (10000000)': 400,
   'End time must be after start time': 409,
   'Trip not found': 404,
-  'Mileage must be greater than zero': 400,
-  'Mileage exceeds the maximum allowed (10000000)': 400,
   'Liters must be greater than zero': 400,
   'Cost per liter must be greater than zero': 400,
   'Liters exceeds the maximum allowed (99999999.99)': 400,
@@ -61,10 +59,7 @@ const MENSAGENS_EXATAS: Record<string, number> = {
 
 // Mensagens com número/status dinâmico no fim (ex: "... (15000)"): comparação por prefixo.
 const PREFIXOS_DINAMICOS: Array<{ prefixo: string; status: number }> = [
-  { prefixo: 'Current mileage cannot be less than vehicle current mileage (', status: 409 },
-  { prefixo: 'End mileage cannot be less than vehicle current mileage (', status: 409 },
   { prefixo: 'Trip cannot be cancelled (status: ', status: 409 },
-  { prefixo: 'Mileage cannot be less than vehicle current mileage (', status: 409 },
 ];
 
 // Formato do erro que o driver adapter (@prisma/adapter-pg) devolve para um

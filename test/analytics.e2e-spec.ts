@@ -90,12 +90,11 @@ describe('Analytics (e2e)', () => {
     return driver.body;
   }
 
-  // Cria uma trip e a leva até COMPLETED (start -> end), com km conhecido.
+  // Cria uma trip e a leva até COMPLETED (start sem corpo, end com km RODADOS).
   async function criarViagemConcluida(
     driverId: string,
     vehicleId: string,
-    startKm: number,
-    endKm: number,
+    kmRodados: number,
   ) {
     const trip = await autenticado(tokenAdmin, 'post', '/trips')
       .send({
@@ -108,11 +107,10 @@ describe('Analytics (e2e)', () => {
     idsDeTripParaLimpar.push(trip.body.id);
 
     await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/start`)
-      .send({ currentMileage: startKm })
       .expect(200);
 
     const finalizada = await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/end`)
-      .send({ endMileage: endKm, endLocation: 'Destino teste analytics' })
+      .send({ endKm: kmRodados, endLocation: 'Destino teste analytics' })
       .expect(200);
 
     return finalizada.body;
@@ -121,12 +119,11 @@ describe('Analytics (e2e)', () => {
   async function criarAbastecimento(
     driverId: string,
     vehicleId: string,
-    mileage: number,
     litersAdded: number,
     costPerLiter: number,
   ) {
     const resposta = await autenticado(tokenAdmin, 'post', '/refuelings')
-      .send({ vehicleId, driverId, mileage, litersAdded, costPerLiter, fuelType: 'DIESEL' })
+      .send({ vehicleId, driverId, litersAdded, costPerLiter, fuelType: 'DIESEL' })
       .expect(201);
     idsDeRefuelingParaLimpar.push(resposta.body.id);
     return resposta.body;
@@ -259,11 +256,11 @@ describe('Analytics (e2e)', () => {
       const driver = await criarMotorista();
 
       // 2 viagens concluídas: 100km + 150km = 250km no total.
-      await criarViagemConcluida(driver.id, veiculo.id, 5000, 5100);
-      await criarViagemConcluida(driver.id, veiculo.id, 5100, 5250);
+      await criarViagemConcluida(driver.id, veiculo.id, 100);
+      await criarViagemConcluida(driver.id, veiculo.id, 150);
 
       // 1 abastecimento: 25 litros a 5 reais/litro = 125 reais.
-      await criarAbastecimento(driver.id, veiculo.id, 5250, 25, 5);
+      await criarAbastecimento(driver.id, veiculo.id, 25, 5);
 
       // 1 incidente LOW.
       await criarIncidente(driver.id, veiculo.id, 'LOW');

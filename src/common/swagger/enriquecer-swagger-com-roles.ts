@@ -27,31 +27,30 @@ const REGRA_POR_SCHEMA: Record<string, string> = {
     'Uma promoção errada não pode ser desfeita pela API. O corpo leva só `roleId` (enviar `driver` dá 400).',
 };
 
-// Sufixo sorteado a cada boot: o e-mail de exemplo nunca colide com uma conta já existente
-// (um e-mail fixo como novo.driver@fleet.com dava 409 se alguém já tivesse cadastrado).
-const SUFIXO_DO_EXEMPLO = Math.random().toString(36).slice(2, 8);
+// Placeholder que nunca existe no banco: o exemplo executado como está não funciona.
+const ID_DE_EXEMPLO = '00000000-0000-0000-0000-000000000000';
 
-function montarCorpoDeExemplo(schema: string, roleId: string, nomeDoPapel: string) {
+function montarCorpoDeExemplo(schema: string, nomeDoPapel: string) {
   if (schema === 'CreateUserDto') {
     const corpo: Record<string, unknown> = {
-      email: `exemplo.${nomeDoPapel.toLowerCase()}.${SUFIXO_DO_EXEMPLO}@exemplo.com`,
-      password: 'SenhaForte123',
+      email: 'pessoa@exemplo.invalid',
+      password: 'senha-exemplo',
       fullName: `Usuário ${nomeDoPapel}`,
-      roleId,
+      roleId: ID_DE_EXEMPLO,
       isActive: true,
     };
     // Só o exemplo de DRIVER leva o bloco que cria o perfil de motorista junto.
     if (nomeDoPapel === 'DRIVER') {
-      corpo.driver = { licenseNumber: '12345678900', licenseExpiry: '2030-08-30' };
+      corpo.driver = { licenseNumber: '00000000000', licenseExpiry: '2020-01-01' };
     }
     return corpo;
   }
   // TrocarRoleDto: só o roleId (a rota apenas promove).
-  return { roleId };
+  return { roleId: ID_DE_EXEMPLO };
 }
 
 function montarTabelaMarkdown(papeis: PapelDoBanco[]): string {
-  let tabela = '\n\n**IDs das roles deste ambiente** (os papéis também podem ser listados em `GET /roles`)\n\n| Papel | roleId | O que pode fazer |\n|---|---|---|\n';
+  let tabela = '\n\n**IDs das roles deste ambiente** (os papéis também podem ser listados em `GET /roles`). Os exemplos usam um ID fictício: copie o `roleId` real da tabela. Exemplo ilustrativo: substitua pelos dados reais antes de executar.\n\n| Papel | roleId | O que pode fazer |\n|---|---|---|\n';
   for (const papel of papeis) {
     let resumo = RESUMO_DOS_PAPEIS[papel.name];
     if (!resumo) {
@@ -81,7 +80,6 @@ export async function enriquecerSwaggerComRoles(
     }
 
     const tabela = montarTabelaMarkdown(papeis);
-    const idDoDriver = papeis.find((papel) => papel.name === 'DRIVER')?.id ?? papeis[0].id;
 
     for (const rota of ROTAS_COM_ROLE) {
       const operacao = documento.paths?.[rota.caminho]?.[rota.metodo as 'post'];
@@ -100,21 +98,13 @@ export async function enriquecerSwaggerComRoles(
           }
           exemplos[`Usuário ${papel.name}`] = {
             summary: `Usuário ${papel.name}`,
-            value: montarCorpoDeExemplo(rota.schema, papel.id, papel.name),
+            value: montarCorpoDeExemplo(rota.schema, papel.name),
           };
         }
         conteudo.examples = exemplos;
       }
     }
 
-    // Troca o UUID inventado do schema por um ID real (DRIVER, o mais seguro).
-    const schemas = documento.components?.schemas as Record<string, any> | undefined;
-    for (const nome of ['CreateUserDto', 'TrocarRoleDto']) {
-      const propriedade = schemas?.[nome]?.properties?.roleId;
-      if (propriedade) {
-        propriedade.example = idDoDriver;
-      }
-    }
   } catch (erro) {
     logger.warn(`Não foi possível ler as roles para o Swagger: ${(erro as Error).message}`);
   }

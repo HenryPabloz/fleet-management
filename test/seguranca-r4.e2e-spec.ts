@@ -79,7 +79,6 @@ describe('Segurança R4: roleId, IDOR e dados do usuário logado (e2e)', () => {
       .send({
         vehicleId: veiculo.id,
         driverId,
-        mileage: 1050,
         litersAdded: 20,
         costPerLiter: 5,
         fuelType: 'DIESEL',
@@ -224,10 +223,9 @@ describe('Segurança R4: roleId, IDOR e dados do usuário logado (e2e)', () => {
       const dono = await novoUsuario('DRIVER');
       const { viagem } = await novaViagem(dono.driverId as string);
       await autenticado(motoristaB.token, 'patch', `/trips/${viagem.id}/start`)
-        .send({ currentMileage: 1100 })
         .expect(404);
       await autenticado(motoristaB.token, 'patch', `/trips/${viagem.id}/end`)
-        .send({ endMileage: 1200, endLocation: '01310-100' })
+        .send({ endKm: 100, endLocation: '01310-100' })
         .expect(404);
       await autenticado(motoristaB.token, 'patch', `/trips/${viagem.id}/cancel`).expect(404);
 
@@ -239,7 +237,6 @@ describe('Segurança R4: roleId, IDOR e dados do usuário logado (e2e)', () => {
       const dono = await novoUsuario('DRIVER');
       const { viagem } = await novaViagem(dono.driverId as string);
       const iniciada = await autenticado(dono.token, 'patch', `/trips/${viagem.id}/start`)
-        .send({ currentMileage: 1100 })
         .expect(200);
       expect(iniciada.body.status).toEqual('IN_PROGRESS');
 
@@ -263,7 +260,6 @@ describe('Segurança R4: roleId, IDOR e dados do usuário logado (e2e)', () => {
         .send({
           vehicleId: veiculo.id,
           driverId: motoristaA.driverId,
-          mileage: 1050,
           litersAdded: 20,
           costPerLiter: 5,
           fuelType: 'DIESEL',
@@ -295,7 +291,6 @@ describe('Segurança R4: roleId, IDOR e dados do usuário logado (e2e)', () => {
         .send({
           vehicleId: veiculo2.id,
           driverId: motoristaB.driverId,
-          mileage: 1050,
           litersAdded: 20,
           costPerLiter: 5,
           fuelType: 'DIESEL',

@@ -12,7 +12,6 @@ import {
 } from '../common/utils/paginacao.util';
 import { buscarDriverIdProprio, garantirDriverIdProprio } from '../common/utils/resolver-driver-proprio.util';
 import { CreateTripDto } from './dto/create-trip.dto';
-import { StartTripDto } from './dto/start-trip.dto';
 import { EndTripDto } from './dto/end-trip.dto';
 
 @Injectable()
@@ -138,11 +137,10 @@ export class TripsService {
     return this.buscarPorId(idDaViagemCriada);
   }
 
-  // start_trip exige o vehicleId da viagem; buscamos aqui em vez de pedir no
-  // DTO, para o cliente não ter que repassar um dado que a viagem já tem.
+  // start_trip exige o vehicleId da viagem; buscamos aqui. O startKm vira o
+  // hodômetro do veículo (feito pela procedure; nada vem do cliente).
   async iniciar(
     id: string,
-    dados: StartTripDto,
     idDoUsuario: string,
     escopoDoUsuario?: { userId: string; temPermissaoViewAll: boolean },
   ) {
@@ -153,7 +151,7 @@ export class TripsService {
         await tx.$executeRaw`SELECT set_config('app.current_user_id', ${idDoUsuario}::text, true)`;
 
         await tx.$queryRaw`
-          CALL start_trip(${id}::uuid, ${viagem.vehicleId}::uuid, ${dados.currentMileage}, NULL, NULL, NULL)
+          CALL start_trip(${id}::uuid, ${viagem.vehicleId}::uuid, NULL, NULL, NULL)
         `;
       });
     } catch (erro) {
@@ -163,6 +161,8 @@ export class TripsService {
     return this.buscarPorId(id);
   }
 
+  // endKm do DTO = km rodados. A procedure soma ao hodômetro do veículo e
+  // devolve total_km (rodados) e vehicle_mileage (novo hodômetro).
   async finalizar(
     id: string,
     dados: EndTripDto,
@@ -171,19 +171,23 @@ export class TripsService {
   ) {
     await this.buscarPorId(id, escopoDoUsuario);
 
+    let kmRodados = 0;
+
     try {
       await this.servicoPrisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT set_config('app.current_user_id', ${idDoUsuario}::text, true)`;
 
-        await tx.$queryRaw`
-          CALL end_trip(${id}::uuid, ${dados.endMileage}, ${dados.endLocation}, NULL, NULL, NULL, NULL, NULL, NULL)
+        const resultado = await tx.$queryRaw<Array<{ total_km: number }>>`
+          CALL end_trip(${id}::uuid, ${dados.endKm}, ${dados.endLocation}, NULL, NULL, NULL, NULL, NULL, NULL)
         `;
+        kmRodados = Number(resultado[0].total_km);
       });
     } catch (erro) {
       traduzirErroDeProcedure(erro);
     }
 
-    return this.buscarPorId(id);
+    const viagem = await this.buscarPorId(id);
+    return { ...viagem, distanceKm: kmRodados };
   }
 
   async cancelar(

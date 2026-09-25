@@ -10,13 +10,14 @@ import { PrismaService } from './../src/database/prisma.service';
 
 jest.setTimeout(60000);
 
-// Deleção total (/permanent) com dependências: 409 claro ou apagar junto (incidentes resolvidos).
+// Deleção total (/permanent) com dependências: 409 claro ou apagar junto (incidentes resolvidos; abastecimentos em cascata).
 describe('Hard delete com dependências (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
   let tokenAdmin: string;
   let roleIdDriver: string;
 
+  const idsDeAbastecimento: string[] = [];
   const idsDeIncidente: string[] = [];
   const idsDeViagem: string[] = [];
   const idsDeMotorista: string[] = [];
@@ -152,6 +153,7 @@ describe('Hard delete com dependências (e2e)', () => {
   afterAll(async () => {
     // Dependentes primeiro. audit_logs gerados ficam (append-only), com autor NULL.
     if (prisma) {
+      await prisma.refueling.deleteMany({ where: { id: { in: idsDeAbastecimento } } });
       await prisma.incident.deleteMany({ where: { id: { in: idsDeIncidente } } });
       await prisma.trip.deleteMany({ where: { id: { in: idsDeViagem } } });
       await prisma.driver.deleteMany({ where: { id: { in: idsDeMotorista } } });
@@ -201,6 +203,36 @@ describe('Hard delete com dependências (e2e)', () => {
 
     const resposta = await apagarComoAdmin(`/vehicles/${cenario.veiculo.id}/permanent`).expect(409);
     expect(resposta.body.detail).toContain('associated trips');
+  });
+
+  it('veículo com abastecimentos (sem viagem/manutenção/incidente): 204 e os abastecimentos somem em cascata', async () => {
+    const usuario = await criarUsuario();
+    const motorista = await criarMotorista(usuario.id);
+    const veiculo = await criarVeiculo();
+
+    for (let indice = 0; indice < 2; indice++) {
+      const criado = await request(app.getHttpServer())
+        .post('/refuelings')
+        .set('Authorization', `Bearer ${tokenAdmin}`)
+        .send({
+          vehicleId: veiculo.id,
+          driverId: motorista.id,
+          litersAdded: 20,
+          costPerLiter: 5,
+          fuelType: 'GASOLINE',
+        })
+        .expect(201);
+      idsDeAbastecimento.push(criado.body.id);
+    }
+    const antes = await prisma.refueling.count({ where: { vehicleId: veiculo.id } });
+    expect(antes).toBe(2);
+
+    await apagarComoAdmin(`/vehicles/${veiculo.id}/permanent`).expect(204);
+
+    const veiculoNoBanco = await prisma.vehicle.findUnique({ where: { id: veiculo.id } });
+    expect(veiculoNoBanco).toBeNull();
+    const depois = await prisma.refueling.count({ where: { id: { in: idsDeAbastecimento } } });
+    expect(depois).toBe(0);
   });
 
   it('viagem com incidente não resolvido: 409 e nada é apagado', async () => {

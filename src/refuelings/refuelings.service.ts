@@ -87,8 +87,8 @@ export class RefuelingsService {
     return abastecimento;
   }
 
-  // register_refueling calcula o total_cost e atualiza a quilometragem do
-  // veículo; não reimplementamos essa conta aqui.
+  // register_refueling calcula o total_cost e grava o hodômetro atual do veículo
+  // em mileage (foto); o abastecimento não altera o hodômetro.
   async criar(
     dados: CreateRefuelingDto,
     idDoUsuario: string,
@@ -105,7 +105,7 @@ export class RefuelingsService {
         await tx.$executeRaw`SELECT set_config('app.current_user_id', ${idDoUsuario}::text, true)`;
 
         const resultado = await tx.$queryRaw<Array<{ id: string }>>`
-          CALL register_refueling(${dados.vehicleId}::uuid, ${dados.driverId}::uuid, ${dados.mileage}, ${dados.litersAdded}::decimal, ${dados.costPerLiter}::decimal, ${dados.fuelType}, ${idDoUsuario}::uuid, NULL, NULL, NULL)
+          CALL register_refueling(${dados.vehicleId}::uuid, ${dados.driverId}::uuid, ${dados.litersAdded}::decimal, ${dados.costPerLiter}::decimal, ${dados.fuelType}, ${idDoUsuario}::uuid, NULL, NULL, NULL)
         `;
         idDoAbastecimentoCriado = resultado[0].id;
       });
@@ -117,10 +117,7 @@ export class RefuelingsService {
   }
 
   // Sem PATCH/PUT de edição livre: abastecimento é registro histórico gerado
-  // por procedure. Editar mileage depois desincronizaria vehicles.current_mileage
-  // (o trigger de sincronia dispara de novo em qualquer UPDATE de mileage,
-  // podendo fazer a quilometragem "andar para trás"). Corrigir um lançamento
-  // errado é apagar e recriar, não editar.
+  // por procedure. Corrigir um lançamento errado é apagar e recriar.
   async remover(id: string): Promise<void> {
     await this.buscarPorId(id);
     await this.servicoSoftDelete.removerLogicamente('refueling', id);

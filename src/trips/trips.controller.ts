@@ -66,13 +66,14 @@ const TRIP_SCHEMA = {
     startKm: {
       type: 'integer',
       description:
-        'Provisório (quilometragem do veículo na criação) até o `start`; depois é a leitura real do hodômetro informada no start.',
+        'Hodômetro INICIAL da viagem (km): provisório (hodômetro do veículo na criação) até o `start`, que o fixa como o hodômetro do veículo naquele momento. Nunca vem do cliente.',
       example: 15000,
     },
     endKm: {
       type: 'integer',
       nullable: true,
-      description: 'Leitura do hodômetro ao chegar (`endMileage`). Distância percorrida = endKm - startKm.',
+      description:
+        'Hodômetro FINAL ABSOLUTO (= startKm + km rodados), preenchido no `end`. Atenção: no request do `PATCH /trips/:id/end` o campo `endKm` significa km RODADOS; aqui na resposta é o hodômetro final. Distância percorrida = endKm - startKm.',
       example: null,
     },
     startLocation: {
@@ -94,6 +95,19 @@ const TRIP_SCHEMA = {
   },
 };
 
+// Resposta do PATCH end: a viagem + distanceKm (km rodados informados no end).
+const TRIP_END_SCHEMA = {
+  type: 'object',
+  properties: {
+    ...TRIP_SCHEMA.properties,
+    distanceKm: {
+      type: 'integer',
+      description: 'Km rodados na viagem (o `endKm` enviado no request; igual a endKm - startKm da resposta).',
+      example: 180,
+    },
+  },
+};
+
 // Descrição reaproveitada nas 3 rotas de transição de status: os erros mais
 // prováveis que create_trip/start_trip/end_trip/cancel_trip (procedures do
 // banco) devolvem, traduzidos via traduzirErroDeProcedure (P0001 -> HTTP).
@@ -102,7 +116,7 @@ const ERROS_DE_PROCEDURE_COMUNS =
   'para HTTP. Os erros mais prováveis: veículo indisponível (em uso, em manutenção ou fora de ' +
   'serviço — 409), motorista inativo ou com CNH vencida (409), motorista/veículo/viagem não ' +
   'encontrado (404), viagem em status incompatível com a transição pedida (409), e dados fora ' +
-  'do limite (quilometragem negativa ou maior que o permitido — 400).';
+  'do limite (km rodados <= 0 ou > 100.000, hodômetro resultante acima de 10.000.000 — 400).';
 
 // Sem PUT/PATCH genérico de campos livres: a viagem só muda de estado pelas
 // rotas de negócio (start/end/cancel), que chamam as procedures do banco.
@@ -305,30 +319,37 @@ export class TripsController {
   @ApiOperation({
     summary: 'Inicia uma viagem (PLANNED -> IN_PROGRESS)',
     description:
-      'Chama a procedure `start_trip`. Recebe `currentMileage` (leitura real do hodômetro ao sair; não pode ser menor que a atual do veículo), que vira o `startKm` definitivo da viagem e a quilometragem do veículo. Só funciona em ' +
+      'Chama a procedure `start_trip`. **Não recebe corpo**: o `startKm` passa a ser o hodômetro do veículo ' +
+      '(que nunca vem do cliente) e o hodômetro não muda no start. Cliente antigo que ainda envie ' +
+      '`currentMileage` (ou qualquer campo) recebe 400. Só funciona em ' +
       'viagens `PLANNED`; qualquer outro status resulta em 409. Acesso: ADMIN, FLEET_MANAGER, ' +
       'DRIVER.\n\n' +
       ERROS_DE_PROCEDURE_COMUNS +
-      '\n\n`x-database-tables`: lê `trips`; escreve em `trips` (procedure `start_trip`).',
+      '\n\n`x-database-tables`: lê `trips`, `vehicles`; escreve em `trips` e `vehicles` (só o status do veículo; procedure `start_trip`).',
     ...({
-      'x-database-tables': { read: ['trips'], write: ['trips'] },
+      'x-database-tables': { read: ['trips', 'vehicles'], write: ['trips', 'vehicles'] },
     } as Record<string, unknown>),
   })
   @ApiParam({ name: 'id', description: 'Id da viagem (UUID).', format: 'uuid' })
-  @ApiBody({ type: StartTripDto })
+  @ApiBody({
+    required: false,
+    description: 'Sem corpo: não envie nenhum campo (o hodômetro é o do veículo).',
+    schema: { type: 'object', additionalProperties: false, example: {} },
+  })
   @ApiResponse({ status: 200, description: 'Viagem iniciada (status IN_PROGRESS).', schema: TRIP_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Corpo inválido, ou erro de validação da procedure (ex: quilometragem menor que a de início).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 400, description: 'Corpo enviado (o start não aceita nenhum campo).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 409, description: 'Viagem não está em status PLANNED.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   async iniciar(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dados: StartTripDto,
+    // O corpo só existe para a validação recusar campos (StartTripDto vazio).
+    @Body() _corpo: StartTripDto,
     @CurrentUser() usuario: UsuarioLogado,
   ) {
     const escopo = await this.resolverEscopoDoUsuario(usuario);
-    return this.servicoTrips.iniciar(id, dados, usuario.userId, escopo);
+    return this.servicoTrips.iniciar(id, usuario.userId, escopo);
   }
 
   @Patch(':id/end')
@@ -337,19 +358,20 @@ export class TripsController {
   @ApiOperation({
     summary: 'Finaliza uma viagem (IN_PROGRESS -> COMPLETED)',
     description:
-      'Chama a procedure `end_trip` com `endMileage` (hodômetro ao chegar; não menor que `startKm` nem que a atual do veículo) e `endLocation` (texto livre). Distância percorrida = `endMileage - startKm`; a quilometragem do veículo passa a ser `endMileage` e ele volta a AVAILABLE. Só funciona ' +
+      'Chama a procedure `end_trip` com `endKm` e `endLocation` (texto livre). **No request, `endKm` = quilômetros RODADOS na viagem** (1 a 100.000; a distância estimada pode ser maior que a real, então o motorista informa a real) — não é leitura de hodômetro. O sistema soma `endKm` ao hodômetro do veículo (`antes + endKm`) e ele volta a AVAILABLE. ' +
+      '**Na resposta, `endKm` é o hodômetro FINAL absoluto** (= `startKm` + km rodados); a distância percorrida é `endKm - startKm` e também vem em `distanceKm`. Só funciona ' +
       'em viagens `IN_PROGRESS`; qualquer outro status resulta em 409. Acesso: ADMIN, ' +
       'FLEET_MANAGER, DRIVER.\n\n' +
       ERROS_DE_PROCEDURE_COMUNS +
-      '\n\n`x-database-tables`: lê `trips`; escreve em `trips` e `vehicles` (procedure `end_trip`).',
+      '\n\n`x-database-tables`: lê `trips`, `vehicles`; escreve em `trips` e `vehicles` (hodômetro e status; procedure `end_trip`).',
     ...({
-      'x-database-tables': { read: ['trips'], write: ['trips', 'vehicles'] },
+      'x-database-tables': { read: ['trips', 'vehicles'], write: ['trips', 'vehicles'] },
     } as Record<string, unknown>),
   })
   @ApiParam({ name: 'id', description: 'Id da viagem (UUID).', format: 'uuid' })
   @ApiBody({ type: EndTripDto })
-  @ApiResponse({ status: 200, description: 'Viagem finalizada (status COMPLETED).', schema: TRIP_SCHEMA })
-  @ApiResponse({ status: 400, description: 'Corpo inválido, ou erro de validação da procedure (ex: quilometragem final menor que a inicial).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
+  @ApiResponse({ status: 200, description: 'Viagem finalizada (status COMPLETED). `endKm` = hodômetro final; `distanceKm` = km rodados.', schema: TRIP_END_SCHEMA })
+  @ApiResponse({ status: 400, description: 'Corpo inválido, ou erro da procedure (`endKm` <= 0, > 100.000, ou hodômetro resultante acima de 10.000.000).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 403, description: 'Papel do usuário autenticado não tem acesso.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 404, description: 'Viagem não encontrada.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
