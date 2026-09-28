@@ -32,6 +32,7 @@ import { DriverRespostaDto } from './dto/driver-response.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
 import { DriversService } from './drivers.service';
 
+
 // Query de paginação comum às duas rotas de listagem (GET / e GET /deleted/all).
 const QUERY_PAGE = {
   name: 'page',
@@ -97,8 +98,8 @@ export class DriversController {
     summary: 'Lista motoristas removidos (soft delete), paginado',
     description:
       'Lista motoristas já removidos logicamente (deletedAt preenchido), paginado. Acesso: permission `DRIVER_RESTORE` (ADMIN por papel; delegável a outros usuários).\n\n' +
-      '`x-database-tables`: lê `drivers`.',
-    ...({ 'x-database-tables': { read: ['drivers'] } } as Record<string, unknown>),
+      '`x-database-tables`: lê `drivers` e `users`.',
+    ...({ 'x-database-tables': { read: ['drivers', 'users'] } } as Record<string, unknown>),
   })
   @ApiQuery(QUERY_PAGE)
   @ApiQuery(QUERY_PAGE_SIZE)

@@ -2,7 +2,6 @@ import 'dotenv/config';
 import { PrismaClient } from '../src/generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcrypt';
-import { createHash, randomBytes } from 'node:crypto';
 
 // Códigos de permissão e nomes de papel seguem o guia (ficam em inglês).
 const permissoes = [
@@ -185,29 +184,6 @@ function lerSenhaAdmin(): string {
   return SENHA_ADMIN_PADRAO;
 }
 
-// Lê a chave de API do admin (64 hex minúsculos) e diz se foi gerada agora.
-// Em produção ela é obrigatória; fora dela, se faltar, gera uma nova.
-function lerChaveApiAdmin(): { chave: string; foiGerada: boolean } {
-  const chaveDoEnv = process.env.ADMIN_API_KEY;
-
-  if (chaveDoEnv && chaveDoEnv !== '') {
-    if (!/^[0-9a-f]{64}$/.test(chaveDoEnv)) {
-      throw new Error('ADMIN_API_KEY must be exactly 64 lowercase hex characters');
-    }
-    return { chave: chaveDoEnv, foiGerada: false };
-  }
-
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('ADMIN_API_KEY is required when NODE_ENV=production');
-  }
-  return { chave: randomBytes(32).toString('hex'), foiGerada: true };
-}
-
-// O banco guarda só o hash SHA-256 da chave, nunca a chave.
-function gerarHashDaChave(chave: string): string {
-  return createHash('sha256').update(chave).digest('hex');
-}
-
 async function criarPermissoes(clientePrisma: PrismaClient) {
   for (const permissao of permissoes) {
     await clientePrisma.permission.upsert({
@@ -264,12 +240,7 @@ async function ligarPermissoesAosPapeis(clientePrisma: PrismaClient) {
   console.log('Assigned permissions to roles');
 }
 
-async function criarAdmin(
-  clientePrisma: PrismaClient,
-  email: string,
-  senha: string,
-  chaveApi: { chave: string; foiGerada: boolean },
-) {
+async function criarAdmin(clientePrisma: PrismaClient, email: string, senha: string) {
   const papelAdmin = await clientePrisma.role.findUnique({ where: { name: 'ADMIN' } });
   if (!papelAdmin) {
     throw new Error('Role ADMIN not found');
@@ -278,7 +249,7 @@ async function criarAdmin(
   const senhaComHash = bcrypt.hashSync(senha, 10);
 
   // update vazio: numa segunda execução não troca a senha do admin.
-  const admin = await clientePrisma.user.upsert({
+  await clientePrisma.user.upsert({
     where: { email: email },
     update: {},
     create: {
@@ -290,23 +261,6 @@ async function criarAdmin(
     },
   });
   console.log(`Admin user ready (${email})`);
-
-  // Só grava a chave se o admin ainda não tiver uma (nunca sobrescreve).
-  const resultado = await clientePrisma.user.updateMany({
-    where: { id: admin.id, apiKey: null },
-    data: { apiKey: gerarHashDaChave(chaveApi.chave), apiKeyCreatedAt: new Date() },
-  });
-
-  if (resultado.count === 0) {
-    console.log('Admin already has an API key (kept as is)');
-    return;
-  }
-
-  console.log('Admin API key saved (hash only)');
-  if (chaveApi.foiGerada) {
-    console.log(`ADMIN API KEY: ${chaveApi.chave}`);
-    console.log('Save it now, it will not be shown again.');
-  }
 }
 
 async function main() {
@@ -315,7 +269,6 @@ async function main() {
   // Lê as configurações antes de gravar qualquer coisa (falha cedo).
   const emailAdmin = lerEmailAdmin();
   const senhaAdmin = lerSenhaAdmin();
-  const chaveApiAdmin = lerChaveApiAdmin();
   const clientePrisma = criarPrisma();
 
   try {
@@ -323,7 +276,7 @@ async function main() {
     await criarPapeis(clientePrisma);
     await removerPermissoesObsoletas(clientePrisma);
     await ligarPermissoesAosPapeis(clientePrisma);
-    await criarAdmin(clientePrisma, emailAdmin, senhaAdmin, chaveApiAdmin);
+    await criarAdmin(clientePrisma, emailAdmin, senhaAdmin);
     console.log('Seed completed successfully');
   } finally {
     await clientePrisma.$disconnect();

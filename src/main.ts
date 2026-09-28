@@ -2,19 +2,16 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { useContainer } from 'class-validator';
-import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import compression from 'compression';
-import { join } from 'path';
 import { AppModule } from './app.module';
 import { ConfigVars } from './config/configuration';
 import { PrismaService } from './database/prisma.service';
 import { enriquecerSwaggerComRoles } from './common/swagger/enriquecer-swagger-com-roles';
-import { garantirPastaDeUploads } from './incidents/utils/upload-incidents.config';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create(AppModule);
   // Adiciona headers de segurança padrão e desliga o X-Powered-By.
   app.use(helmet());
   // Comprime as respostas (gzip) quando o cliente aceita.
@@ -32,10 +29,6 @@ async function bootstrap() {
     app.enableCors({ origin: origensPermitidas, credentials: true });
   }
 
-  // Cria a pasta de uploads se não existir e serve os arquivos em /uploads/*
-  // (é assim que a photoUrl de um incidente funciona de verdade).
-  garantirPastaDeUploads();
-  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });
   // Faz o Nest fechar tudo direito (inclusive o banco) ao receber Ctrl+C ou SIGTERM.
   app.enableShutdownHooks();
   // Faz os decorators do DTO (ex: @IsEmail) valerem e recusa campos extras.

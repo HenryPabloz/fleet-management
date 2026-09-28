@@ -30,7 +30,7 @@ API REST em NestJS para gestão de veículos, motoristas, viagens, abastecimento
 - **Regras de negócio no banco**: procedures e triggers em PostgreSQL garantem integridade (ex: não permitir duas viagens ativas para o mesmo veículo/motorista, sincronizar quilometragem, auditoria append-only, com autor anonimizável).
 - **Integração com ViaCEP** (via `HttpService`) para validar/enriquecer o CEP da localização inicial de um veículo.
 - **Analytics/indicadores de frota**: consumo de combustível, distância diária, eficiência por veículo, viagens por motorista, incidentes por severidade.
-- **Upload local de arquivos**: foto opcional em incidentes, servida em `/uploads/*`.
+- **Upload de arquivos**: foto opcional em incidentes, enviada para um bucket no Google Cloud Storage.
 
 ## Stack e versões
 
@@ -112,7 +112,6 @@ O que acontece automaticamente:
 - O serviço `app` só inicia depois que o `postgres` fica `healthy` (`depends_on` com `condition: service_healthy`).
 - No start do container, o `CMD` do `Dockerfile` roda `npx prisma migrate deploy` antes de subir a aplicação — não é preciso aplicar as migrations manualmente.
 - O `Dockerfile` usa `COPY --chown` (sem `chown -R` em camada separada): build de ~4 min para ~1 min e imagem de 1.86 GB para 1.05 GB.
-- A pasta `uploads/` (fotos de incidentes) fica num volume Docker (`uploads_data`), então os arquivos sobrevivem a um rebuild do container.
 
 **Atenção à porta do banco:** fora do container (no seu PC) o Postgres está em `localhost:5433` (é o mapeamento definido no serviço `postgres`). Dentro da rede interna do compose, o serviço `app` enxerga o Postgres como `postgres:5432` (nome do serviço, porta interna padrão) — por isso o `DATABASE_URL` usado pelo container da API é diferente do valor em `.env.example`/`.env` (que é pensado pra rodar a API fora do Docker, contra a porta `5433` do host).
 
@@ -133,10 +132,9 @@ Copie `.env.example` para `.env` e preencha os valores. Nenhum valor abaixo é r
 | `JWT_EXPIRATION` | Prazo de validade do JWT (ex: `24h`). |
 | `PORT` | Porta em que a aplicação escuta (padrão `3000`). |
 | `NODE_ENV` | Ambiente de execução (`development`, `production`, `test`). |
-| `AWS_ACCESS_KEY_ID` | Credencial de acesso à AWS (reservada para uso incremental; não é usada no upload local atual). |
-| `AWS_SECRET_ACCESS_KEY` | Segredo correspondente à credencial AWS acima. |
-| `AWS_REGION` | Região da AWS associada às credenciais acima. |
-| `AWS_S3_BUCKET` | Nome do bucket S3 associado às credenciais acima. |
+| `GCS_BUCKET_NAME` | Nome do bucket do Google Cloud Storage onde ficam as fotos de incidentes. |
+| `GCS_PROJECT_ID` | Id do projeto no Google Cloud associado ao bucket acima. |
+| `GCS_KEY_FILE` | Caminho do arquivo JSON da Service Account usada para autenticar no bucket (nunca commitar esse arquivo). |
 | `CEP_API_URL` | URL base da API do ViaCEP usada para validar/enriquecer CEPs. |
 | `CEP_TIMEOUT_MS` | Timeout (em ms) das chamadas à API de CEP. |
 | `CORS_ORIGIN` | Origens liberadas para CORS. `*` libera qualquer origem (uso em dev); em produção, use uma lista de domínios separados por vírgula (ex: `https://app.com,https://admin.app.com`) — com origem restrita, `credentials: true` é habilitado junto. |

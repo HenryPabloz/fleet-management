@@ -3,7 +3,8 @@ import { ApiProperty } from '@nestjs/swagger';
 /**
  * Formato real devolvido pelas rotas de drivers: o `DriversService` não usa
  * `select`, então a linha inteira do banco volta, inclusive `deletedAt`
- * (fica `null` enquanto o motorista não é removido).
+ * (fica `null` enquanto o motorista não é removido). `fullName` vem de um
+ * join com `users` (só o nome, sem email/senha/roleId).
  */
 export class DriverRespostaDto {
   @ApiProperty({
@@ -17,6 +18,12 @@ export class DriverRespostaDto {
     example: 'b3c1a2e4-6f5d-4a8b-9c2e-1a2b3c4d5e6f',
   })
   userId!: string;
+
+  @ApiProperty({
+    description: 'Nome completo do motorista (vem de `users.fullName`).',
+    example: 'Carlos Eduardo Silva',
+  })
+  fullName!: string;
 
   @ApiProperty({
     description: 'Número da CNH (único no sistema).',

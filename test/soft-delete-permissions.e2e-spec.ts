@@ -64,7 +64,7 @@ describe('Permissions de soft delete/restore e isActive (e2e)', () => {
     idsUsuarios.push(id);
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .set('x-api-key', cadastro.body.apiKey as string)
+      .set('x-api-key', process.env.API_KEY as string)
       .send({ email, password: SENHA })
       .expect(200);
     return { id, token: login.body.accessToken as string };
@@ -205,7 +205,7 @@ describe('Permissions de soft delete/restore e isActive (e2e)', () => {
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .set('x-api-key', process.env.ADMIN_API_KEY as string)
+      .set('x-api-key', process.env.API_KEY as string)
       .send({ email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_INITIAL_PASSWORD })
       .expect(200);
     tokenAdmin = login.body.accessToken;

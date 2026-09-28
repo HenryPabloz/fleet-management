@@ -25,7 +25,7 @@ services:
         condition: service_healthy
     ports:
       - "3000:3000"
-    # env_file carrega as variáveis "fixas" do .env (JWT, AWS, CEP, admin...).
+    # env_file carrega as variáveis "fixas" do .env (JWT, GCS, CEP, admin...).
     # DATABASE_URL é sobrescrita logo abaixo porque, de dentro do container, o Postgres
     # não é "localhost:5433" (isso é só o mapeamento pro host) e sim "postgres:5432"
     # (nome do serviço na rede interna do compose, porta interna do Postgres).
@@ -35,8 +35,9 @@ services:
       DATABASE_URL: "postgresql://postgres:root@postgres:5432/fleet_db?schema=public"
       PORT: 3000
     volumes:
-      - uploads_data:/app/uploads
+      # A chave da Service Account do GCS não vai na imagem (fica fora do git);
+      # é montada aqui, só leitura, no mesmo caminho apontado por GCS_KEY_FILE no .env.
+      - ./micro-avenue-510016-r5-c1918baaad3f.json:/app/micro-avenue-510016-r5-c1918baaad3f.json:ro
 
 volumes:
   postgres_data:
-  uploads_data:

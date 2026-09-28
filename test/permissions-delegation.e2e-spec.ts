@@ -64,7 +64,7 @@ describe('Delegação granular de permissões (UserPermission) (e2e)', () => {
     return corpo;
   }
 
-  // O ADMIN cria o usuário por POST /users e loga com a apiKey devolvida.
+  // O ADMIN cria o usuário por POST /users e loga com a API_KEY fixa da aplicação.
   async function criarUsuarioELogar(roleId: string, nome: string) {
     const corpo = corpoDeUsuario(roleId, nome);
     const cadastro = await autenticado('post', '/users', tokenAdmin).send(corpo).expect(201);
@@ -73,7 +73,7 @@ describe('Delegação granular de permissões (UserPermission) (e2e)', () => {
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .set('x-api-key', cadastro.body.apiKey)
+      .set('x-api-key', process.env.API_KEY as string)
       .send({ email: corpo.email, password: SENHA })
       .expect(200);
 
@@ -126,7 +126,7 @@ describe('Delegação granular de permissões (UserPermission) (e2e)', () => {
 
     const respostaLogin = await request(app.getHttpServer())
       .post('/auth/login')
-      .set('x-api-key', process.env.ADMIN_API_KEY as string)
+      .set('x-api-key', process.env.API_KEY as string)
       .send({
         email: process.env.ADMIN_EMAIL,
         password: process.env.ADMIN_INITIAL_PASSWORD,

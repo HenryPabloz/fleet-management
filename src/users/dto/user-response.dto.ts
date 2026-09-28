@@ -75,15 +75,8 @@ export class UserComMotoristaRespostaDto extends UserRespostaDto {
   driver?: MotoristaResumoDto;
 }
 
-// Resposta de POST /users: inclui a API key em texto, mostrada uma única vez.
-export class UserCriadoRespostaDto extends UserComMotoristaRespostaDto {
-  @ApiProperty({
-    description:
-      'API key em texto (64 hex). Aparece SÓ nesta resposta: o banco guarda apenas o hash. Guarde e entregue ao usuário.',
-    example: '9f2c4b7a1d0e8c3f5a6b2d9e7c1f4a8b3e6d0c5f9a2b7e1d4c8f3a6b0e5d9c21',
-  })
-  apiKey: string;
-}
+// Resposta de POST /users: usuário mais o perfil de motorista, quando houver.
+export class UserCriadoRespostaDto extends UserComMotoristaRespostaDto {}
 
 // Resposta de GET /users/me: o usuário mais permissões efetivas e driverId.
 export class MeuPerfilRespostaDto extends UserRespostaDto {

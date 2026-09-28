@@ -1,17 +1,16 @@
 import 'dotenv/config';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { ValidationPipe } from '@nestjs/common';
 import { useContainer } from 'class-validator';
-import { NestExpressApplication } from '@nestjs/platform-express';
 import { JwtService } from '@nestjs/jwt';
 import { randomBytes } from 'crypto';
-import { join } from 'path';
 import request from 'supertest';
+import axios from 'axios';
+import { Storage } from '@google-cloud/storage';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/database/prisma.service';
 import { dataFutura as dataFuturaIso } from './helpers/usuarios-e2e';
 import { ViaCepService } from './../src/external/viacep/via-cep.service';
-import { garantirPastaDeUploads } from './../src/incidents/utils/upload-incidents.config';
 
 const SENHA = 'SenhaForte123';
 
@@ -27,7 +26,7 @@ const PNG_MINIMO = Buffer.from(
 );
 
 describe('Trips, Refuelings e Incidents (e2e)', () => {
-  let app: NestExpressApplication;
+  let app: INestApplication;
   let prisma: PrismaService;
   let servicoJwt: JwtService;
   let servicoViaCep: ViaCepService;
@@ -106,13 +105,11 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
   }
 
   beforeAll(async () => {
-    garantirPastaDeUploads();
-
     const modulo: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
 
-    app = modulo.createNestApplication<NestExpressApplication>();
+    app = modulo.createNestApplication();
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -120,7 +117,6 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
         transform: true,
       }),
     );
-    app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads' });
     useContainer(app.select(AppModule), { fallbackOnErrors: true });
     await app.init();
 
@@ -130,7 +126,7 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
 
     const respostaLogin = await request(app.getHttpServer())
       .post('/auth/login')
-      .set('x-api-key', process.env.ADMIN_API_KEY as string)
+      .set('x-api-key', process.env.API_KEY as string)
       .send({
         email: process.env.ADMIN_EMAIL,
         password: process.env.ADMIN_INITIAL_PASSWORD,
@@ -246,27 +242,36 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
         .expect(201);
       idsDeIncidentParaLimpar.push(incident.body.id);
       expect(incident.body.status).toEqual('REPORTED');
-      expect(incident.body.photoUrl).toMatch(/^http:\/\/localhost:\d+\/uploads\/incidents\//);
+      expect(incident.body.photoUrl).toMatch(/^https:\/\/storage\.googleapis\.com\//);
       expect(incident.body.photoKey).toMatch(/\.png$/);
 
-      // Confere que o arquivo existe de verdade em uploads/incidents/
-      const nomeDoArquivo = incident.body.photoKey as string;
-      const caminhoLocal = join(process.cwd(), 'uploads', 'incidents', nomeDoArquivo);
-      const fs = await import('fs');
-      expect(fs.existsSync(caminhoLocal)).toBe(true);
-
-      // Confere que o GET na photoUrl devolvida realmente serve a imagem
-      const caminhoPublico = new URL(incident.body.photoUrl).pathname;
-      const respostaDaFoto = await request(app.getHttpServer()).get(caminhoPublico).expect(200);
+      // Confere que o GET na photoUrl devolvida realmente serve a imagem do bucket
+      const respostaDaFoto = await axios.get(incident.body.photoUrl as string, {
+        responseType: 'arraybuffer',
+      });
+      expect(respostaDaFoto.status).toEqual(200);
       expect(respostaDaFoto.headers['content-type']).toMatch(/image/);
 
-      // Limpeza do arquivo físico de teste (hard delete apaga o arquivo)
+      // Limpeza do arquivo de teste (hard delete apaga o arquivo do bucket)
       await autenticado(tokenAdmin, 'delete', `/incidents/${incident.body.id}`).expect(204);
       await autenticado(tokenAdmin, 'delete', `/incidents/${incident.body.id}/permanent`).expect(
         204,
       );
       idsDeIncidentParaLimpar.splice(idsDeIncidentParaLimpar.indexOf(incident.body.id), 1);
-      expect(fs.existsSync(caminhoLocal)).toBe(false);
+
+      // Não checamos via GET na URL pública aqui: o GCS aplica cache de borda
+      // (Cache-Control: public, max-age=3600) em objetos públicos, então um
+      // GET pode continuar devolvendo 200 por até 1h mesmo após o objeto ter
+      // sido apagado de verdade. Perguntamos direto pro bucket via SDK.
+      const clienteStorage = new Storage({
+        projectId: process.env.GCS_PROJECT_ID,
+        keyFilename: process.env.GCS_KEY_FILE,
+      });
+      const [aindaExiste] = await clienteStorage
+        .bucket(process.env.GCS_BUCKET_NAME as string)
+        .file(incident.body.photoKey as string)
+        .exists();
+      expect(aindaExiste).toBe(false);
     });
   });
 
@@ -760,6 +765,35 @@ describe('Trips, Refuelings e Incidents (e2e)', () => {
       const viagemNoBanco = await prisma.trip.findUnique({ where: { id: trip.body.id } });
       expect(viagemNoBanco?.startLocation).toEqual('São Paulo, SP');
       expect(viagemNoBanco?.endLocation).toEqual('Belo Horizonte, MG');
+    });
+
+    it('PATCH /trips/:id/end substitui end_location pelo valor novo, sem sobra do antigo', async () => {
+      const veiculo = await criarVeiculo();
+      const driver = await criarMotorista();
+
+      // endLocation do POST fica "Curitiba, PR" (CEP resolvido); o end troca por texto livre.
+      const trip = await autenticado(tokenAdmin, 'post', '/trips')
+        .send({
+          driverId: driver.id,
+          vehicleId: veiculo.id,
+          startLocation: '01310-100',
+          endLocation: '80010-000',
+        })
+        .expect(201);
+      idsDeTripParaLimpar.push(trip.body.id);
+      expect(trip.body.endLocation).toEqual('Curitiba, PR');
+
+      await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/start`).expect(200);
+
+      const tripFinalizada = await autenticado(tokenAdmin, 'patch', `/trips/${trip.body.id}/end`)
+        .send({ endKm: 120, endLocation: 'Avenida Paulista, 1000' })
+        .expect(200);
+
+      // Precisa ser exatamente o novo valor, nunca o antigo concatenado na frente.
+      expect(tripFinalizada.body.endLocation).toEqual('Avenida Paulista, 1000');
+
+      const viagemNoBanco = await prisma.trip.findUnique({ where: { id: trip.body.id } });
+      expect(viagemNoBanco?.endLocation).toEqual('Avenida Paulista, 1000');
     });
 
     it('POST /trips com CEP inválido em startLocation dá 400', async () => {

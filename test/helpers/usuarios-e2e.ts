@@ -20,14 +20,13 @@ export function dataFutura(): string {
 export interface UsuarioCriado {
   id: string;
   email: string;
-  apiKey: string;
   token: string;
   roleId: string;
   driverId?: string;
 }
 
 // O ADMIN cria o usuário por POST /users (com bloco driver se for DRIVER),
-// recebe a apiKey na resposta e faz login com ela.
+// e o login usa a API_KEY fixa da aplicação (a mesma para todo mundo).
 export async function criarUsuarioELogar(
   app: INestApplication,
   prisma: PrismaService,
@@ -60,14 +59,13 @@ export async function criarUsuarioELogar(
 
   const login = await request(app.getHttpServer())
     .post('/auth/login')
-    .set('x-api-key', criacao.body.apiKey)
+    .set('x-api-key', process.env.API_KEY as string)
     .send({ email, password: SENHA_PADRAO })
     .expect(200);
 
   return {
     id: criacao.body.id as string,
     email,
-    apiKey: criacao.body.apiKey as string,
     token: login.body.accessToken as string,
     roleId: papel.id,
     driverId: criacao.body.driver?.id as string | undefined,

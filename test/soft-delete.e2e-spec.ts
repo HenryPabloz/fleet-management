@@ -72,7 +72,7 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
     // Login como o ADMIN do seed, igual ao teste de auth com x-api-key.
     const respostaLogin = await request(app.getHttpServer())
       .post('/auth/login')
-      .set('x-api-key', process.env.ADMIN_API_KEY as string)
+      .set('x-api-key', process.env.API_KEY as string)
       .send({
         email: process.env.ADMIN_EMAIL,
         password: process.env.ADMIN_INITIAL_PASSWORD,
@@ -122,8 +122,8 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
       idUsuario = resposta.body.id;
       idsDeUsuarioParaLimpar.push(idUsuario);
       expect(resposta.body.password).toBeUndefined();
-      // POST /users devolve a apiKey em texto uma única vez.
-      expect(typeof resposta.body.apiKey).toBe('string');
+      // A autenticação agora usa a API_KEY fixa da aplicação; POST /users não devolve chave própria.
+      expect(resposta.body.apiKey).toBeUndefined();
     });
 
     it('GET /users lista o usuário criado (paginado)', async () => {
@@ -444,9 +444,8 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
     });
   });
 
-  describe('Segurança: soft delete revoga autenticação (JWT e API key)', () => {
+  describe('Segurança: soft delete revoga autenticação (JWT e login)', () => {
     let email: string;
-    let apiKey: string;
     let idUsuario: string;
     let jwtAntigo: string;
 
@@ -455,19 +454,18 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
       const cadastro = await autenticado('post', '/users')
         .send({ email, password: SENHA, fullName: 'Usuario Teste Auth Revoke', roleId: roleIdGerente })
         .expect(201);
-      apiKey = cadastro.body.apiKey;
       idUsuario = cadastro.body.id;
       idsDeUsuarioParaLimpar.push(idUsuario);
 
       const login = await request(app.getHttpServer())
         .post('/auth/login')
-        .set('x-api-key', apiKey)
+        .set('x-api-key', process.env.API_KEY as string)
         .send({ email, password: SENHA })
         .expect(200);
       jwtAntigo = login.body.accessToken;
     });
 
-    it('JWT e API key funcionam normalmente antes do soft delete', async () => {
+    it('JWT e login funcionam normalmente antes do soft delete', async () => {
       await request(app.getHttpServer())
         .get('/users/me')
         .set('Authorization', `Bearer ${jwtAntigo}`)
@@ -488,15 +486,16 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
         .expect(401);
     });
 
-    it('a MESMA API key também passa a dar 401 em POST /auth/login', async () => {
-      await request(app.getHttpServer())
+    it('login desse usuário passa a dar 401 (soft-deletado não é encontrado; a API key é fixa e continua válida)', async () => {
+      const resposta = await request(app.getHttpServer())
         .post('/auth/login')
-        .set('x-api-key', apiKey)
+        .set('x-api-key', process.env.API_KEY as string)
         .send({ email, password: SENHA })
         .expect(401);
+      expect(resposta.body.detail).toEqual('Invalid credentials');
     });
 
-    it('PATCH /users/:id/restore devolve isActive true e o login com a mesma API key volta a funcionar', async () => {
+    it('PATCH /users/:id/restore devolve isActive true e o login volta a funcionar', async () => {
       await autenticado('patch', `/users/${idUsuario}/restore`).expect(200);
 
       const noBanco = await prisma.user.findUnique({ where: { id: idUsuario } });
@@ -505,7 +504,7 @@ describe('Soft delete: Users e Drivers (e2e)', () => {
 
       await request(app.getHttpServer())
         .post('/auth/login')
-        .set('x-api-key', apiKey)
+        .set('x-api-key', process.env.API_KEY as string)
         .send({ email, password: SENHA })
         .expect(200);
     });

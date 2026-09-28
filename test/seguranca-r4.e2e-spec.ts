@@ -115,7 +115,7 @@ describe('Segurança R4: roleId, IDOR e dados do usuário logado (e2e)', () => {
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .set('x-api-key', process.env.ADMIN_API_KEY as string)
+      .set('x-api-key', process.env.API_KEY as string)
       .send({ email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_INITIAL_PASSWORD })
       .expect(200);
     tokenAdmin = login.body.accessToken;
@@ -347,7 +347,7 @@ describe('Segurança R4: roleId, IDOR e dados do usuário logado (e2e)', () => {
 
       const login = await request(app.getHttpServer())
         .post('/auth/login')
-        .set('x-api-key', gerente.apiKey)
+        .set('x-api-key', process.env.API_KEY as string)
         .send({ email: gerente.email, password: 'SenhaForte123' })
         .expect(200);
       expect(login.body.user.permissions).toContain('USER_VIEW');
@@ -364,7 +364,7 @@ describe('Segurança R4: roleId, IDOR e dados do usuário logado (e2e)', () => {
       const motorista = await novoUsuario('DRIVER');
       const login = await request(app.getHttpServer())
         .post('/auth/login')
-        .set('x-api-key', motorista.apiKey)
+        .set('x-api-key', process.env.API_KEY as string)
         .send({ email: motorista.email, password: 'SenhaForte123' })
         .expect(200);
       expect(login.body.user.driverId).toEqual(motorista.driverId);

@@ -33,7 +33,6 @@ import { NomePipe } from '../common/pipes/name-pipe';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
 import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
-import { RegenerateApiKeyResponseDto } from '../auth/dto/regenerate-api-key-response.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateMeuPerfilDto } from './dto/update-meu-perfil.dto';
@@ -237,11 +236,10 @@ export class UsersController {
   @HttpCode(201)
   @Header('Cache-Control', 'no-store')
   @ApiOperation({
-    summary: 'Cria um usuário (e gera a API key dele)',
+    summary: 'Cria um usuário',
     description:
       'Único caminho de cadastro do sistema (não existe cadastro público). Cria o usuário com o papel (`roleId`) ' +
-      'informado, gera a API key, grava só o hash e devolve a chave em texto (`apiKey`) UMA única vez: ' +
-      'guarde e entregue ao usuário; ela não é mostrada de novo (perdeu? `POST /users/{id}/regenerate-api-key`, só ADMIN). ' +
+      'informado; a autenticação dele usa a `API_KEY` fixa da aplicação (a mesma para todos), não uma chave própria. ' +
       'Com papel DRIVER o bloco `driver` (`licenseNumber` com 11 dígitos, `licenseExpiry`) é OBRIGATÓRIO e cria conta + perfil ' +
       'de motorista na mesma transação; com outro papel, `driver` retorna 400. ' +
       'Quem pode atribuir o quê: ADMIN atribui qualquer papel; quem não é ADMIN (ex: FLEET_MANAGER, que tem `USER_CREATE` por padrão) ' +
@@ -252,7 +250,7 @@ export class UsersController {
     } as Record<string, unknown>),
   })
   @ApiBody({ type: CreateUserDto })
-  @ApiResponse({ status: 201, description: 'Usuário criado; traz `apiKey` (só desta vez) e `driver` quando houver.', type: UserCriadoRespostaDto })
+  @ApiResponse({ status: 201, description: 'Usuário criado; traz `driver` quando houver.', type: UserCriadoRespostaDto })
   @ApiResponse({ status: 400, description: 'Corpo inválido, `roleId` inexistente, DRIVER sem bloco `driver`, `driver` com papel diferente de DRIVER ou CNH vencida.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
   @ApiResponse({ status: 403, description: 'Sem a permission `USER_CREATE`, ou quem não é ADMIN tentou criar papel diferente de DRIVER.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
@@ -301,32 +299,6 @@ export class UsersController {
     @CurrentUser() usuario: UsuarioLogado,
   ) {
     return this.servicoUsers.trocarRole(id, dados, usuario);
-  }
-
-  // Poder sensível: só ADMIN, sem delegação por permissão.
-  @Post(':id/regenerate-api-key')
-  @Roles('ADMIN')
-  @HttpCode(200)
-  @Header('Cache-Control', 'no-store')
-  @ApiOperation({
-    summary: 'Reemite a API key de outro usuário',
-    description:
-      'Use quando um usuário perdeu a API key: gera uma nova, grava só o hash e devolve a chave em texto ' +
-      'UMA única vez. A chave antiga deixa de valer na hora (o JWT já emitido continua válido até expirar). ' +
-      'Acesso: somente ADMIN (não delegável). Para trocar a própria chave use `PATCH /auth/regenerate-key`.\n\n' +
-      '`x-database-tables`: lê `users` (confirma que existe e não foi removido); escreve em `users` (hash da nova chave).',
-    ...({
-      'x-database-tables': { read: ['users'], write: ['users'] },
-    } as Record<string, unknown>),
-  })
-  @ApiParam({ name: 'id', description: 'Id do usuário que perdeu a chave (UUID).', format: 'uuid' })
-  @ApiResponse({ status: 200, description: 'Nova API key emitida.', type: RegenerateApiKeyResponseDto })
-  @ApiResponse({ status: 400, description: 'Id fora do formato UUID.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 401, description: 'Token ausente, inválido ou expirado.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 403, description: 'Somente ADMIN.', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  @ApiResponse({ status: 404, description: 'Usuário não encontrado (ou removido).', schema: { $ref: getSchemaPath(ProblemDetailsDto) } })
-  regenerarApiKey(@Param('id', ParseUUIDPipe) id: string) {
-    return this.servicoUsers.regenerarApiKey(id);
   }
 
   @Patch(':id')

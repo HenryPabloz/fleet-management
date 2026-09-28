@@ -2,7 +2,6 @@ import 'dotenv/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { useContainer } from 'class-validator';
-import { JwtService } from '@nestjs/jwt';
 import { randomBytes } from 'crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -13,11 +12,10 @@ const SENHA = 'SenhaForte123';
 
 jest.setTimeout(60000);
 
-// Cobre: reemissão de API key (ADMIN), POST /users com bloco driver (obrigatório para DRIVER) e a remoção de POST /drivers.
-describe('Users: reemissão de chave e cadastro de motorista (e2e)', () => {
+// Cobre: POST /users com bloco driver (obrigatório para DRIVER) e a remoção de POST /drivers.
+describe('Users: cadastro de motorista (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
-  let servicoJwt: JwtService;
   let tokenAdmin: string;
   let roleIdDriver: string;
   let roleIdFleetManager: string;
@@ -67,23 +65,6 @@ describe('Users: reemissão de chave e cadastro de motorista (e2e)', () => {
     return resposta.body as { id: string; email: string };
   }
 
-  // Dá uma chave conhecida ao usuário (via rota ADMIN) e devolve a chave em texto.
-  async function reemitirChave(idUsuario: string): Promise<string> {
-    const resposta = await autenticado(
-      tokenAdmin,
-      'post',
-      `/users/${idUsuario}/regenerate-api-key`,
-    ).expect(200);
-    return resposta.body.newApiKey;
-  }
-
-  function entrar(chave: string, email: string) {
-    return request(app.getHttpServer())
-      .post('/auth/login')
-      .set('x-api-key', chave)
-      .send({ email, password: SENHA });
-  }
-
   beforeAll(async () => {
     const modulo: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -101,11 +82,10 @@ describe('Users: reemissão de chave e cadastro de motorista (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
-    servicoJwt = app.get(JwtService);
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .set('x-api-key', process.env.ADMIN_API_KEY as string)
+      .set('x-api-key', process.env.API_KEY as string)
       .send({
         email: process.env.ADMIN_EMAIL,
         password: process.env.ADMIN_INITIAL_PASSWORD,
@@ -135,52 +115,14 @@ describe('Users: reemissão de chave e cadastro de motorista (e2e)', () => {
     }
   });
 
-  describe('POST /users/:id/regenerate-api-key', () => {
-    it('ADMIN reemite: a chave nova loga o alvo e a antiga deixa de valer', async () => {
+  describe('POST /users/:id/regenerate-api-key não existe mais', () => {
+    it('404 para qualquer chamada (rota removida: a autenticação agora usa a API_KEY fixa)', async () => {
       const alvo = await criarUsuario(roleIdDriver);
-      const chaveAntiga = await reemitirChave(alvo.id);
-      await entrar(chaveAntiga, alvo.email).expect(200);
-
-      const resposta = await autenticado(
-        tokenAdmin,
-        'post',
-        `/users/${alvo.id}/regenerate-api-key`,
-      ).expect(200);
-      expect(resposta.body.newApiKey).toMatch(/^[0-9a-f]{64}$/);
-      expect(resposta.headers['cache-control']).toEqual('no-store');
-
-      await entrar(resposta.body.newApiKey, alvo.email).expect(200);
-      await entrar(chaveAntiga, alvo.email).expect(401);
-    });
-
-    it('FLEET_MANAGER e DRIVER recebem 403', async () => {
-      const alvo = await criarUsuario(roleIdDriver);
-      const gerente = await criarUsuario(roleIdFleetManager);
-      const motorista = await criarUsuario(roleIdDriver);
-
-      for (const quem of [
-        { usuario: gerente, roleId: roleIdFleetManager },
-        { usuario: motorista, roleId: roleIdDriver },
-      ]) {
-        const token = servicoJwt.sign({
-          sub: quem.usuario.id,
-          email: quem.usuario.email,
-          roleId: quem.roleId,
-        });
-        await autenticado(token, 'post', `/users/${alvo.id}/regenerate-api-key`).expect(403);
-      }
-    });
-
-    it('404 para usuário inexistente e para usuário soft-deletado', async () => {
       await autenticado(
         tokenAdmin,
         'post',
-        '/users/00000000-0000-4000-8000-000000000000/regenerate-api-key',
+        `/users/${alvo.id}/regenerate-api-key`,
       ).expect(404);
-
-      const alvo = await criarUsuario(roleIdDriver);
-      await autenticado(tokenAdmin, 'delete', `/users/${alvo.id}`).expect(204);
-      await autenticado(tokenAdmin, 'post', `/users/${alvo.id}/regenerate-api-key`).expect(404);
     });
   });
 

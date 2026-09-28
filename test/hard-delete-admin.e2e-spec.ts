@@ -36,7 +36,7 @@ describe('Hard delete só ADMIN (e2e)', () => {
       .set('Authorization', `Bearer ${token}`);
   }
 
-  // O ADMIN cria o usuário por POST /users e loga com a apiKey devolvida.
+  // O ADMIN cria o usuário por POST /users e loga com a API_KEY fixa da aplicação.
   async function criarUsuarioELogarComToken(nomeDoPapel: string) {
     const usuario = await criarUsuarioELogar(app, prisma, tokenAdmin, nomeDoPapel, 'e2e-hd', `Teste ${nomeDoPapel}`);
     idsDeUsuarioParaLimpar.push(usuario.id);
@@ -57,7 +57,7 @@ describe('Hard delete só ADMIN (e2e)', () => {
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .set('x-api-key', process.env.ADMIN_API_KEY as string)
+      .set('x-api-key', process.env.API_KEY as string)
       .send({ email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_INITIAL_PASSWORD })
       .expect(200);
     tokenAdmin = login.body.accessToken;

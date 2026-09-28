@@ -11,7 +11,6 @@ import { PrismaService } from './../src/database/prisma.service';
 import { dataFutura, novaCnh } from './helpers/usuarios-e2e';
 
 const SENHA = 'SenhaForte123';
-const FORMATO_CHAVE = /^[0-9a-f]{64}$/;
 
 jest.setTimeout(60000);
 
@@ -21,10 +20,10 @@ describe('Auth com X-API-KEY (e2e)', () => {
   let servicoJwt: JwtService;
   let tokenAdmin: string;
   let roleIdDriver: string;
+  let chaveCorreta: string;
 
   // Só estes e-mails são apagados no fim.
   const emailsCriados: string[] = [];
-  let dataUltimoUsoDoAdmin: Date | null = null;
 
   function novoEmail(): string {
     const email = `e2e-${randomBytes(6).toString('hex')}@test.local`;
@@ -33,7 +32,7 @@ describe('Auth com X-API-KEY (e2e)', () => {
   }
 
   // Sem "async": precisa devolver o próprio pedido para o chamador poder usar .expect().
-  // O ADMIN cria o usuário (DRIVER) por POST /users; a resposta traz a apiKey.
+  // O ADMIN cria o usuário (DRIVER) por POST /users; a autenticação usa a API_KEY fixa.
   function cadastrar(email: string) {
     return request(app.getHttpServer())
       .post('/users')
@@ -55,20 +54,9 @@ describe('Auth com X-API-KEY (e2e)', () => {
     return requisicao.send(corpo);
   }
 
-  function regenerar(chave: string | undefined, senha: string | null = SENHA) {
-    const requisicao = request(app.getHttpServer()).patch(
-      '/auth/regenerate-key',
-    );
-    if (chave !== undefined) {
-      requisicao.set('x-api-key', chave);
-    }
-    if (senha === null) {
-      return requisicao.send({});
-    }
-    return requisicao.send({ password: senha });
-  }
-
   beforeAll(async () => {
+    chaveCorreta = process.env.API_KEY as string;
+
     const modulo: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -90,7 +78,7 @@ describe('Auth com X-API-KEY (e2e)', () => {
 
     const loginAdmin = await request(app.getHttpServer())
       .post('/auth/login')
-      .set('x-api-key', process.env.ADMIN_API_KEY as string)
+      .set('x-api-key', chaveCorreta)
       .send({
         email: process.env.ADMIN_EMAIL,
         password: process.env.ADMIN_INITIAL_PASSWORD,
@@ -99,14 +87,6 @@ describe('Auth com X-API-KEY (e2e)', () => {
     tokenAdmin = loginAdmin.body.accessToken;
     const papelDriver = await prisma.role.findUnique({ where: { name: 'DRIVER' } });
     roleIdDriver = papelDriver?.id as string;
-
-    // Guarda o "último uso" do admin para devolver como estava.
-    const admin = await prisma.user.findUnique({
-      where: { email: process.env.ADMIN_EMAIL as string },
-    });
-    if (admin) {
-      dataUltimoUsoDoAdmin = admin.apiKeyLastUsedAt;
-    }
   });
 
   afterAll(async () => {
@@ -118,48 +98,35 @@ describe('Auth com X-API-KEY (e2e)', () => {
       const ids = criados.map((usuario) => usuario.id);
       await prisma.driver.deleteMany({ where: { userId: { in: ids } } });
       await prisma.user.deleteMany({ where: { id: { in: ids } } });
-      await prisma.user.updateMany({
-        where: { email: process.env.ADMIN_EMAIL as string },
-        data: { apiKeyLastUsedAt: dataUltimoUsoDoAdmin },
-      });
     }
     if (app) {
       await app.close();
     }
   });
 
-  describe('POST /users gera a API key (não existe mais cadastro público)', () => {
-    it('cria usuário, devolve chave única e grava só o hash (api_key nunca nulo)', async () => {
-      const email1 = novoEmail();
-      const email2 = novoEmail();
+  describe('POST /users (não existe mais cadastro público)', () => {
+    it('cria usuário sem devolver apiKey (a autenticação usa a chave fixa da aplicação)', async () => {
+      const email = novoEmail();
 
-      const resposta1 = await cadastrar(email1).expect(201);
-      const resposta2 = await cadastrar(email2).expect(201);
+      const resposta = await cadastrar(email).expect(201);
 
-      expect(resposta1.body.apiKey).toMatch(FORMATO_CHAVE);
-      expect(resposta2.body.apiKey).toMatch(FORMATO_CHAVE);
-      expect(resposta1.body.apiKey).not.toEqual(resposta2.body.apiKey);
-      expect(resposta1.body.email).toEqual(email1);
-      expect(resposta1.headers['cache-control']).toEqual('no-store');
-      expect(resposta1.body.password).toBeUndefined();
+      expect(resposta.body.apiKey).toBeUndefined();
+      expect(resposta.body.email).toEqual(email);
+      expect(resposta.headers['cache-control']).toEqual('no-store');
+      expect(resposta.body.password).toBeUndefined();
 
       const usuario = await prisma.user.findUnique({
-        where: { email: email1 },
+        where: { email },
         include: { role: true },
       });
-      expect(usuario?.apiKey).not.toBeNull();
-      expect(usuario?.apiKey).not.toEqual(resposta1.body.apiKey);
-      expect(usuario?.apiKey).toMatch(FORMATO_CHAVE);
       expect(usuario?.password.startsWith('$2')).toBe(true);
       expect(usuario?.role.name).toEqual('DRIVER');
-      expect(usuario?.apiKeyCreatedAt).not.toBeNull();
-      expect(usuario?.apiKeyLastUsedAt).toBeNull();
     });
 
-    it('a chave devolvida já permite o login do usuário novo', async () => {
+    it('a mesma API_KEY da aplicação já permite o login do usuário novo', async () => {
       const email = novoEmail();
-      const criado = await cadastrar(email).expect(201);
-      const resposta = await entrar(criado.body.apiKey, { email, password: SENHA }).expect(200);
+      await cadastrar(email).expect(201);
+      const resposta = await entrar(chaveCorreta, { email, password: SENHA }).expect(200);
       expect(resposta.body.user.email).toEqual(email);
     });
 
@@ -206,18 +173,16 @@ describe('Auth com X-API-KEY (e2e)', () => {
     });
   });
 
-  describe('POST /auth/login (protegido por x-api-key)', () => {
+  describe('POST /auth/login (protegido por x-api-key, chave única e fixa)', () => {
     let email: string;
-    let chave: string;
 
     beforeAll(async () => {
       email = novoEmail();
-      const resposta = await cadastrar(email).expect(201);
-      chave = resposta.body.apiKey;
+      await cadastrar(email).expect(201);
     });
 
-    it('200 com chave e credenciais certas, devolve JWT sem segredos', async () => {
-      const resposta = await entrar(chave, {
+    it('200 com chave certa e credenciais certas, devolve JWT sem segredos', async () => {
+      const resposta = await entrar(chaveCorreta, {
         email: `  ${email.toUpperCase()} `,
         password: SENHA,
       }).expect(200);
@@ -229,14 +194,10 @@ describe('Auth com X-API-KEY (e2e)', () => {
       expect(resposta.body.user.role).toEqual('DRIVER');
 
       const texto = JSON.stringify(resposta.body);
-      expect(texto).not.toContain(chave);
+      expect(texto).not.toContain(chaveCorreta);
       expect(texto).not.toContain('$2');
       expect(resposta.body.user.apiKey).toBeUndefined();
       expect(resposta.body.user.password).toBeUndefined();
-
-      // O uso da chave é registrado.
-      const usuario = await prisma.user.findUnique({ where: { email } });
-      expect(usuario?.apiKeyLastUsedAt).not.toBeNull();
     });
 
     it('401 sem x-api-key', async () => {
@@ -247,20 +208,20 @@ describe('Auth com X-API-KEY (e2e)', () => {
       expect(resposta.body.detail).toEqual('API key required');
     });
 
-    it('401 com chave inexistente, mal formada ou repetida', async () => {
+    it('401 com chave errada, mal formada ou repetida', async () => {
       const corpo = { email, password: SENHA };
       await entrar('a'.repeat(64), corpo).expect(401);
       await entrar('abc', corpo).expect(401);
-      await entrar(chave.toUpperCase(), corpo).expect(401);
-      await entrar(`${chave}, ${chave}`, corpo).expect(401);
+      await entrar(chaveCorreta.toUpperCase(), corpo).expect(401);
+      await entrar(`${chaveCorreta}, ${chaveCorreta}`, corpo).expect(401);
     });
 
-    it('401 igual para senha errada e e-mail inexistente', async () => {
-      const senhaErrada = await entrar(chave, {
+    it('401 igual para senha errada e e-mail inexistente (mesma chave, todos os papéis)', async () => {
+      const senhaErrada = await entrar(chaveCorreta, {
         email,
         password: 'OutraSenha123',
       }).expect(401);
-      const emailInexistente = await entrar(chave, {
+      const emailInexistente = await entrar(chaveCorreta, {
         email: `nao-existe-${randomBytes(4).toString('hex')}@test.local`,
         password: SENHA,
       }).expect(401);
@@ -269,27 +230,15 @@ describe('Auth com X-API-KEY (e2e)', () => {
       expect(emailInexistente.body.detail).toEqual('Invalid credentials');
     });
 
-    it('401 se a chave for de outro usuário', async () => {
-      const outroEmail = novoEmail();
-      const outro = await cadastrar(outroEmail).expect(201);
-
-      // Chave do outro usuário com as credenciais (válidas) do primeiro.
-      const resposta = await entrar(outro.body.apiKey, {
-        email,
-        password: SENHA,
-      }).expect(401);
-      expect(resposta.body.detail).toEqual('Invalid credentials');
-    });
-
-    it('403 para usuário inativo', async () => {
+    it('403 para usuário inativo, mesmo com a chave certa', async () => {
       const emailInativo = novoEmail();
-      const inativo = await cadastrar(emailInativo).expect(201);
+      await cadastrar(emailInativo).expect(201);
       await prisma.user.update({
         where: { email: emailInativo },
         data: { isActive: false },
       });
 
-      const resposta = await entrar(inativo.body.apiKey, {
+      const resposta = await entrar(chaveCorreta, {
         email: emailInativo,
         password: SENHA,
       }).expect(403);
@@ -297,80 +246,72 @@ describe('Auth com X-API-KEY (e2e)', () => {
     });
 
     it('400 com corpo inválido (chave certa)', async () => {
-      await entrar(chave, { email, password: 'curta' }).expect(400);
-      await entrar(chave, { email, password: SENHA, extra: 1 }).expect(400);
+      await entrar(chaveCorreta, { email, password: 'curta' }).expect(400);
+      await entrar(chaveCorreta, { email, password: SENHA, extra: 1 }).expect(400);
     });
   });
 
-  describe('PATCH /auth/regenerate-key', () => {
-    it('gera nova chave, invalida a antiga e a nova funciona', async () => {
-      const email = novoEmail();
-      const cadastro = await cadastrar(email).expect(201);
-      const chaveAntiga: string = cadastro.body.apiKey;
-      const corpo = { email, password: SENHA };
-
-      const resposta = await regenerar(chaveAntiga).expect(200);
-      const chaveNova: string = resposta.body.newApiKey;
-
-      expect(chaveNova).toMatch(FORMATO_CHAVE);
-      expect(chaveNova).not.toEqual(chaveAntiga);
-      expect(resposta.body.message).toEqual('Old key is now invalid');
-      expect(resposta.headers['cache-control']).toEqual('no-store');
-
-      await entrar(chaveAntiga, corpo).expect(401);
-      await regenerar(chaveAntiga).expect(401);
-      await entrar(chaveNova, corpo).expect(200);
-
-      // No banco fica só o hash da chave nova.
-      const usuario = await prisma.user.findUnique({ where: { email } });
-      expect(usuario?.apiKey).not.toEqual(chaveNova);
-      expect(usuario?.apiKey).toMatch(FORMATO_CHAVE);
-    });
-
-    it('401 sem x-api-key', async () => {
-      await regenerar(undefined).expect(401);
-    });
-
-    it('400 sem password no corpo', async () => {
-      const email = novoEmail();
-      const cadastro = await cadastrar(email).expect(201);
-      await regenerar(cadastro.body.apiKey, null).expect(400);
-    });
-
-    it('401 com senha errada e a chave NÃO muda', async () => {
-      const email = novoEmail();
-      const cadastro = await cadastrar(email).expect(201);
-      const chave: string = cadastro.body.apiKey;
-
-      await regenerar(chave, 'SenhaErrada99').expect(401);
-      await entrar(chave, { email, password: SENHA }).expect(200);
-    });
-
-    it('JWT emitido antes continua valendo depois de trocar a chave', async () => {
-      const email = novoEmail();
-      const cadastro = await cadastrar(email).expect(201);
-      const login = await entrar(cadastro.body.apiKey, {
-        email,
-        password: SENHA,
-      }).expect(200);
-      const token: string = login.body.accessToken;
-
-      await regenerar(cadastro.body.apiKey).expect(200);
+  describe('A MESMA API_KEY vale para qualquer papel', () => {
+    it('admin, fleet manager e driver logam todos com a chave da aplicação; chave errada falha para os três', async () => {
+      const gerente = novoEmail();
+      const papelGerente = await prisma.role.findUnique({ where: { name: 'FLEET_MANAGER' } });
       await request(app.getHttpServer())
-        .get('/users/me')
-        .set('Authorization', `Bearer ${token}`)
-        .expect(200);
+        .post('/users')
+        .set('Authorization', `Bearer ${tokenAdmin}`)
+        .send({
+          email: gerente,
+          password: SENHA,
+          fullName: 'Gerente Teste',
+          roleId: papelGerente?.id,
+        })
+        .expect(201);
+
+      const motorista = novoEmail();
+      await cadastrar(motorista).expect(201);
+
+      for (const email of [
+        process.env.ADMIN_EMAIL as string,
+        gerente,
+        motorista,
+      ]) {
+        let senha = SENHA;
+        if (email === process.env.ADMIN_EMAIL) {
+          senha = process.env.ADMIN_INITIAL_PASSWORD as string;
+        }
+        await entrar(chaveCorreta, { email, password: senha }).expect(200);
+        await entrar('chave-errada-0000000000000000000000000000000000000000000000000000', {
+          email,
+          password: senha,
+        }).expect(401);
+        await entrar(undefined, { email, password: senha }).expect(401);
+      }
     });
   });
 
-  describe('JWT não vale nas rotas de x-api-key', () => {
-    it('JWT em /auth/login e em /auth/regenerate-key dá 401', async () => {
+  describe('Rotas de regenerar API key não existem mais', () => {
+    it('PATCH /auth/regenerate-key dá 404', async () => {
+      await request(app.getHttpServer())
+        .patch('/auth/regenerate-key')
+        .set('x-api-key', chaveCorreta)
+        .send({ password: SENHA })
+        .expect(404);
+    });
+
+    it('POST /users/:id/regenerate-api-key dá 404', async () => {
       const email = novoEmail();
-      const cadastro = await cadastrar(email).expect(201);
-      const login = await entrar(cadastro.body.apiKey, {
-        email,
-        password: SENHA,
-      }).expect(200);
+      const criado = await cadastrar(email).expect(201);
+      await request(app.getHttpServer())
+        .post(`/users/${criado.body.id}/regenerate-api-key`)
+        .set('Authorization', `Bearer ${tokenAdmin}`)
+        .expect(404);
+    });
+  });
+
+  describe('JWT não vale na rota de x-api-key', () => {
+    it('JWT em /auth/login dá 401 (falta x-api-key)', async () => {
+      const email = novoEmail();
+      await cadastrar(email).expect(201);
+      const login = await entrar(chaveCorreta, { email, password: SENHA }).expect(200);
       const token: string = login.body.accessToken;
 
       await request(app.getHttpServer())
@@ -378,17 +319,12 @@ describe('Auth com X-API-KEY (e2e)', () => {
         .set('Authorization', `Bearer ${token}`)
         .send({ email, password: SENHA })
         .expect(401);
-      await request(app.getHttpServer())
-        .patch('/auth/regenerate-key')
-        .set('Authorization', `Bearer ${token}`)
-        .send({ password: SENHA })
-        .expect(401);
     });
   });
 
   describe('Admin do seed', () => {
-    it('faz login com ADMIN_API_KEY e ADMIN_INITIAL_PASSWORD', async () => {
-      const resposta = await entrar(process.env.ADMIN_API_KEY as string, {
+    it('faz login com a API_KEY da aplicação e ADMIN_INITIAL_PASSWORD', async () => {
+      const resposta = await entrar(chaveCorreta, {
         email: process.env.ADMIN_EMAIL,
         password: process.env.ADMIN_INITIAL_PASSWORD,
       }).expect(200);

@@ -28,7 +28,7 @@ describe('GET /roles (e2e)', () => {
       .set('Authorization', `Bearer ${token}`);
   }
 
-  // O ADMIN cria o usuário por POST /users (DRIVER leva o bloco driver) e usa a apiKey devolvida.
+  // O ADMIN cria o usuário por POST /users (DRIVER leva o bloco driver) e loga com a API_KEY fixa.
   async function criarUsuarioELogar(fleetManager: boolean) {
     const email = `e2e-roles-${randomBytes(6).toString('hex')}@test.local`;
     const corpo: Record<string, unknown> = { email, password: SENHA, fullName: 'Teste Roles' };
@@ -48,7 +48,7 @@ describe('GET /roles (e2e)', () => {
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .set('x-api-key', cadastro.body.apiKey)
+      .set('x-api-key', process.env.API_KEY as string)
       .send({ email, password: SENHA })
       .expect(200);
     return { id, token: login.body.accessToken as string };
@@ -70,7 +70,7 @@ describe('GET /roles (e2e)', () => {
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .set('x-api-key', process.env.ADMIN_API_KEY as string)
+      .set('x-api-key', process.env.API_KEY as string)
       .send({
         email: process.env.ADMIN_EMAIL,
         password: process.env.ADMIN_INITIAL_PASSWORD,

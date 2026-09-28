@@ -15,7 +15,6 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ConfigService } from '@nestjs/config';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -35,7 +34,6 @@ import { Permissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { UsuarioLogado } from '../auth/interfaces/usuario-logado.interface';
 import { PermissionsService } from '../permissions/permissions.service';
-import type { ConfigVars } from '../config/configuration';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PaginacaoMetadataDto } from '../common/swagger/pagination-response.schema';
 import { ProblemDetailsDto } from '../common/swagger/problem-details.schema';
@@ -43,6 +41,7 @@ import { CreateIncidentDto } from './dto/create-incident.dto';
 import { UpdateIncidentStatusDto } from './dto/update-incident-status.dto';
 import { ListIncidentQueryDto } from './dto/list-incident-query.dto';
 import { IncidentsService } from './incidents.service';
+import { GcsStorageService } from '../common/services/gcs-storage.service';
 import { MulterErrorFilter } from './utils/multer-erro.filter';
 import { configuracaoDeUploadDeIncidente } from './utils/upload-incidents.config';
 
@@ -75,7 +74,7 @@ const INCIDENT_SCHEMA = {
     severity: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH'], example: 'MEDIUM' },
     status: { type: 'string', enum: ['REPORTED', 'UNDER_INVESTIGATION', 'RESOLVED'], example: 'REPORTED' },
     description: { type: 'string', example: 'Pane no motor durante a viagem' },
-    photoUrl: { type: 'string', nullable: true, example: 'http://localhost:3000/uploads/incidents/9c3b...jpg' },
+    photoUrl: { type: 'string', nullable: true, example: 'https://storage.googleapis.com/velocityfleet-imagens/9c3b...jpg' },
     photoKey: { type: 'string', nullable: true, example: '9c3b1e2a-....jpg' },
     registeredBy: { type: 'string', format: 'uuid' },
     createdAt: { type: 'string', format: 'date-time' },
@@ -96,7 +95,7 @@ const INCIDENT_SCHEMA = {
 export class IncidentsController {
   constructor(
     private servicoIncidents: IncidentsService,
-    private servicoDeConfiguracao: ConfigService<ConfigVars, true>,
+    private servicoStorage: GcsStorageService,
     private servicoPermissions: PermissionsService,
   ) {}
 
@@ -227,8 +226,8 @@ export class IncidentsController {
     description:
       'Corpo `multipart/form-data`, não JSON puro: os campos do `CreateIncidentDto` vão como ' +
       'campos de formulário, e a foto (opcional) vai no campo de arquivo `photo` (aceita ' +
-      'image/jpeg, image/png ou application/pdf, até 10MB). Se enviada, a foto é salva em disco ' +
-      '(`uploads/incidents/`) e o registro guarda `photoUrl`/`photoKey`; sem foto, os dois campos ' +
+      'image/jpeg, image/png ou application/pdf, até 10MB). Se enviada, a foto é enviada ao bucket ' +
+      'do Google Cloud Storage e o registro guarda `photoUrl`/`photoKey`; sem foto, os dois campos ' +
       'ficam `null`. `tripId` é opcional (o incidente pode ocorrer fora de viagem); se informado, a viagem precisa estar `IN_PROGRESS` e ser do mesmo veículo e motorista. Chama a procedure `register_incident`. Acesso: ADMIN, FLEET_MANAGER, DRIVER.\n\n' +
       'Erros mais prováveis da procedure (SQLSTATE P0001, traduzidos para HTTP): veículo ou ' +
       'motorista não encontrado (404), motorista inativo (409), `tripId` informado mas motorista ' +
@@ -287,9 +286,13 @@ export class IncidentsController {
 
     // A foto é opcional: nem todo incidente tem uma.
     if (arquivo) {
-      const porta = this.servicoDeConfiguracao.get('app.port', { infer: true });
-      photoUrl = `http://localhost:${porta}/uploads/incidents/${arquivo.filename}`;
-      photoKey = arquivo.filename;
+      const resultadoDoUpload = await this.servicoStorage.enviarArquivo(
+        arquivo.buffer,
+        arquivo.originalname,
+        arquivo.mimetype,
+      );
+      photoUrl = resultadoDoUpload.url;
+      photoKey = resultadoDoUpload.key;
     }
 
     const escopo = await this.resolverEscopoDoUsuario(usuario);
@@ -384,7 +387,7 @@ export class IncidentsController {
     summary: 'Remove um incidente permanentemente (hard delete)',
     description:
       'Apaga a linha de verdade do banco — irreversível, diferente do `DELETE /incidents/:id` ' +
-      '(soft delete). Aqui sim o arquivo físico da foto (se houver) é apagado do disco. Acesso: ' +
+      '(soft delete). Aqui sim o arquivo da foto (se houver) é apagado do bucket. Acesso: ' +
       'ADMIN (FLEET_MANAGER só faz soft delete).\n\n' +
       '`x-database-tables`: lê `incidents`; escreve (apaga) em `incidents`.',
     ...({

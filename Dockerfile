@@ -41,9 +41,7 @@ COPY --from=build --chown=fleet:fleet /app/src/generated ./src/generated
 COPY --from=build --chown=fleet:fleet /app/prisma ./prisma
 COPY --from=build --chown=fleet:fleet /app/prisma.config.ts ./prisma.config.ts
 
-# Pasta de uploads precisa existir e pertencer ao usuário da aplicação (ela é montada
-# como volume no docker-compose, mas o dono do diretório precisa estar certo mesmo assim).
-RUN mkdir -p /app/uploads/incidents && chown fleet:fleet /app && chown -R fleet:fleet /app/uploads
+RUN chown fleet:fleet /app
 USER fleet
 
 EXPOSE 3000

@@ -28,6 +28,7 @@ describe('TripsService.buscarPorId', () => {
       prismaMock as never,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     return servico;

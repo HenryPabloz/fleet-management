@@ -80,7 +80,7 @@ describe('Users: criação com API key, USER_VIEW e troca de role (e2e)', () => 
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .set('x-api-key', process.env.ADMIN_API_KEY as string)
+      .set('x-api-key', process.env.API_KEY as string)
       .send({ email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_INITIAL_PASSWORD })
       .expect(200);
     tokenAdmin = login.body.accessToken;
@@ -104,24 +104,22 @@ describe('Users: criação com API key, USER_VIEW e troca de role (e2e)', () => 
   });
 
   describe('POST /users: chave e papéis permitidos', () => {
-    it('ADMIN cria FLEET_MANAGER e ADMIN sem bloco driver (201) com apiKey', async () => {
+    it('ADMIN cria FLEET_MANAGER e ADMIN sem bloco driver (201)', async () => {
       for (const nomeDoPapel of ['FLEET_MANAGER', 'ADMIN']) {
         const resposta = await autenticado(tokenAdmin, 'post', '/users')
           .send(corpoDeUsuario(nomeDoPapel))
           .expect(201);
         idsParaLimpar.push(resposta.body.id);
-        expect(resposta.body.apiKey).toMatch(/^[0-9a-f]{64}$/);
+        expect(resposta.body.apiKey).toBeUndefined();
         expect(resposta.headers['cache-control']).toEqual('no-store');
         const noBanco = await prisma.user.findUnique({ where: { id: resposta.body.id } });
-        expect(noBanco?.apiKey).not.toBeNull();
+        expect(noBanco).not.toBeNull();
       }
     });
 
-    it('a apiKey devolvida loga o usuário novo e o banco guarda só o hash', async () => {
+    it('o usuário criado loga com a API_KEY fixa da aplicação', async () => {
       const usuario = await novoUsuario('DRIVER');
-      const noBanco = await prisma.user.findUnique({ where: { id: usuario.id } });
-      expect(noBanco?.apiKey).not.toEqual(usuario.apiKey);
-      expect(noBanco?.apiKey).toMatch(/^[0-9a-f]{64}$/);
+      expect(usuario.token).toBeDefined();
       expect(usuario.driverId).toBeDefined();
     });
 
@@ -142,7 +140,6 @@ describe('Users: criação com API key, USER_VIEW e troca de role (e2e)', () => 
         .send(corpoDeUsuario('DRIVER'))
         .expect(201);
       idsParaLimpar.push(criado.body.id);
-      expect(criado.body.apiKey).toMatch(/^[0-9a-f]{64}$/);
 
       for (const nomeDoPapel of ['FLEET_MANAGER', 'ADMIN']) {
         const email = corpoDeUsuario(nomeDoPapel);

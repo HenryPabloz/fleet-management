@@ -87,11 +87,6 @@ model User {
   role     Role    @relation(fields: [roleId], references: [id])
   isActive Boolean @default(true) @map("is_active")
 
-  // apiKey guarda o hash SHA-256 (hex, 64 caracteres) da chave, nunca a chave em si
-  apiKey           String?   @unique @map("api_key") @db.VarChar(255)
-  apiKeyCreatedAt  DateTime? @map("api_key_created_at")
-  apiKeyLastUsedAt DateTime? @map("api_key_last_used_at")
-
   // Relacionamentos
   driver       Driver?
   permissions  UserPermission[]

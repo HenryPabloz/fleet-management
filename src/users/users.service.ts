@@ -9,8 +9,6 @@ import {
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../database/prisma.service';
 import { Prisma } from '../generated/prisma/client';
-import { AuthService } from '../auth/auth.service';
-import { calcularHashApiKey } from '../auth/utils/api-key.util';
 import type { UsuarioLogado } from '../auth/interfaces/usuario-logado.interface';
 import { SoftDeleteService } from '../common/services/soft-delete.service';
 import {
@@ -28,7 +26,7 @@ import { TrocarRoleDto } from './dto/trocar-role.dto';
 // Custo do bcrypt para as senhas.
 const CUSTO_BCRYPT = 10;
 
-// Nunca inclui password/apiKey na resposta.
+// Nunca inclui password na resposta.
 const SELECAO_SEGURA = {
   id: true,
   email: true,
@@ -64,7 +62,6 @@ export class UsersService {
   constructor(
     private servicoPrisma: PrismaService,
     private servicoSoftDelete: SoftDeleteService,
-    private servicoAuth: AuthService,
   ) {}
 
   async listar(
@@ -146,17 +143,12 @@ export class UsersService {
       isActive = dados.isActive;
     }
 
-    // A chave em texto só existe aqui e na resposta; o banco guarda o hash.
-    const apiKey = this.servicoAuth.generateApiKey();
-
     const dadosDoUsuario = {
       email: dados.email,
       password: hashDaSenha,
       fullName: dados.fullName,
       roleId: dados.roleId,
       isActive,
-      apiKey: calcularHashApiKey(apiKey),
-      apiKeyCreatedAt: new Date(),
     };
 
     // Transação: se criar o motorista falhar, a conta também não é criada.
@@ -168,7 +160,7 @@ export class UsersService {
           select: SELECAO_SEGURA,
         });
         if (!dadosDoMotorista) {
-          return { ...usuario, apiKey };
+          return usuario;
         }
         const motorista = await transacao.driver.create({
           data: {
@@ -178,7 +170,7 @@ export class UsersService {
           },
           select: SELECAO_MOTORISTA,
         });
-        return { ...usuario, apiKey, driver: motorista };
+        return { ...usuario, driver: motorista };
       });
     } catch (erro) {
       // Corrida entre a checagem e o insert: mesma resposta 409.
@@ -254,12 +246,6 @@ export class UsersService {
       where: { userId: usuario.userId, permission: { code: codigo } },
     });
     return individual !== null;
-  }
-
-  // Emite nova API key para outro usuário (ex: perdeu a dele). 404 se não existir.
-  async regenerarApiKey(id: string) {
-    await this.buscarPorId(id);
-    return this.servicoAuth.regenerateApiKey(id);
   }
 
   private async validarDadosDoMotorista(motorista: {
@@ -359,12 +345,11 @@ export class UsersService {
       this.servicoSoftDelete.contarRemovidos('user'),
     ]);
 
-    // O select não roda no listarRemovidos genérico; tiramos os campos sensíveis aqui.
+    // O select não roda no listarRemovidos genérico; tiramos a senha aqui.
     const dadosSemSegredos = (dados as Record<string, unknown>[]).map(
       (registro) => {
         const copia = { ...registro };
         delete copia.password;
-        delete copia.apiKey;
         return copia;
       },
     );

@@ -8,7 +8,7 @@ import {
   ResultadoPaginado,
 } from '../common/utils/paginacao.util';
 import { buscarDriverIdProprio, garantirDriverIdProprio } from '../common/utils/resolver-driver-proprio.util';
-import { apagarFotoDoIncidente } from './utils/apagar-foto-incidente.util';
+import { GcsStorageService } from '../common/services/gcs-storage.service';
 import { CreateIncidentDto } from './dto/create-incident.dto';
 import { UpdateIncidentStatusDto } from './dto/update-incident-status.dto';
 
@@ -20,6 +20,7 @@ export class IncidentsService {
   constructor(
     private servicoPrisma: PrismaService,
     private servicoSoftDelete: SoftDeleteService,
+    private servicoStorage: GcsStorageService,
   ) {}
 
   // escopoDoUsuario: quem só tem INCIDENT_VIEW_OWN (não INCIDENT_VIEW_ALL)
@@ -108,12 +109,12 @@ export class IncidentsService {
   ) {
     let idDoIncidenteCriado = '';
 
-    // Se recusar, apaga a foto que o upload já gravou no disco.
+    // Se recusar, apaga a foto que o upload já gravou no bucket.
     if (escopoDoUsuario) {
       try {
         await garantirDriverIdProprio(this.servicoPrisma, escopoDoUsuario, dados.driverId);
       } catch (erro) {
-        await apagarFotoDoIncidente(photoKey);
+        await this.servicoStorage.apagarArquivo(photoKey);
         throw erro;
       }
     }
@@ -193,7 +194,7 @@ export class IncidentsService {
     return montarPaginacao(dados, total, paginacao.page, paginacao.pageSize);
   }
 
-  // Hard delete: aqui sim apagamos o arquivo físico do disco, se existir.
+  // Hard delete: aqui sim apagamos o arquivo do bucket, se existir.
   async removerPermanentemente(id: string): Promise<void> {
     const incidente = await this.servicoPrisma.incident.findUnique({ where: { id } });
     if (!incidente) {
@@ -201,6 +202,6 @@ export class IncidentsService {
     }
 
     await this.servicoSoftDelete.removerPermanentemente('incident', id);
-    await apagarFotoDoIncidente(incidente.photoKey);
+    await this.servicoStorage.apagarArquivo(incidente.photoKey);
   }
 }

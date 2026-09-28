@@ -1,8 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client';
-import { apagarFotoDoIncidente } from '../incidents/utils/apagar-foto-incidente.util';
 import { PrismaService } from '../database/prisma.service';
 import { SoftDeleteService } from '../common/services/soft-delete.service';
+import { GcsStorageService } from '../common/services/gcs-storage.service';
 import { ViaCepService } from '../external/viacep/via-cep.service';
 import { traduzirErroDeProcedure } from '../common/utils/mapeador-erros-procedure.util';
 import {
@@ -20,6 +20,7 @@ export class TripsService {
     private servicoPrisma: PrismaService,
     private servicoSoftDelete: SoftDeleteService,
     private servicoViaCep: ViaCepService,
+    private servicoStorage: GcsStorageService,
   ) {}
 
   // escopoDoUsuario: quem só tem TRIP_VIEW_OWN (não TRIP_VIEW_ALL) tem o
@@ -293,7 +294,7 @@ export class TripsService {
     }
 
     for (const chaveDaFoto of fotosParaApagar) {
-      await apagarFotoDoIncidente(chaveDaFoto);
+      await this.servicoStorage.apagarArquivo(chaveDaFoto);
     }
   }
 }

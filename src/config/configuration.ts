@@ -13,11 +13,10 @@ export interface ConfigVars {
     port: number;
     env: string;
   };
-  aws: {
-    accessKeyId: string;
-    secretAccessKey: string;
-    region: string;
-    s3Bucket: string;
+  gcs: {
+    bucketName: string;
+    projectId: string;
+    keyFile: string;
   };
   external: {
     cepApiUrl: string;
@@ -26,6 +25,7 @@ export interface ConfigVars {
   cors: {
     origin: string;
   };
+  apiKey: string;
 }
 
 // Confere o .env ao iniciar: se faltar algo obrigatório, o app não sobe.
@@ -44,16 +44,19 @@ export function validateConfig(config: Record<string, unknown>): ConfigVars {
       }),
     PORT: joi.number().default(3000),
     NODE_ENV: joi.string().default('development'),
-    // A AWS é opcional: aceita a variável vazia (AWS_REGION="") no .env.
-    AWS_ACCESS_KEY_ID: joi.string().allow('').optional(),
-    AWS_SECRET_ACCESS_KEY: joi.string().allow('').optional(),
-    AWS_REGION: joi.string().allow('').optional(),
-    AWS_S3_BUCKET: joi.string().allow('').optional(),
+    // Bucket do Google Cloud Storage onde ficam as fotos de incidentes.
+    // Opcional (aceita vazio) para não derrubar suítes/ambientes que não
+    // mexem com upload de foto e não têm credenciais de nuvem configuradas.
+    GCS_BUCKET_NAME: joi.string().allow('').optional(),
+    GCS_PROJECT_ID: joi.string().allow('').optional(),
+    GCS_KEY_FILE: joi.string().allow('').optional(),
     CEP_API_URL: joi.string().default('https://viacep.com.br/ws'),
     CEP_TIMEOUT_MS: joi.number().default(10000),
     // "*" libera qualquer origem (uso em dev); em produção, lista separada por
     // vírgula com os domínios do frontend (ex: "https://app.com,https://admin.app.com").
     CORS_ORIGIN: joi.string().default('*'),
+    // Chave fixa da aplicacao, igual para todos os usuarios (ver ApiKeyGuard).
+    API_KEY: joi.string().required(),
   });
 
   const { value, error } = schema.validate(config, { allowUnknown: true });
@@ -66,11 +69,10 @@ export function validateConfig(config: Record<string, unknown>): ConfigVars {
     database: { url: value.DATABASE_URL },
     jwt: { secret: value.JWT_SECRET, expiration: value.JWT_EXPIRATION },
     app: { port: value.PORT, env: value.NODE_ENV },
-    aws: {
-      accessKeyId: value.AWS_ACCESS_KEY_ID,
-      secretAccessKey: value.AWS_SECRET_ACCESS_KEY,
-      region: value.AWS_REGION,
-      s3Bucket: value.AWS_S3_BUCKET,
+    gcs: {
+      bucketName: value.GCS_BUCKET_NAME,
+      projectId: value.GCS_PROJECT_ID,
+      keyFile: value.GCS_KEY_FILE,
     },
     external: {
       cepApiUrl: value.CEP_API_URL,
@@ -79,5 +81,6 @@ export function validateConfig(config: Record<string, unknown>): ConfigVars {
     cors: {
       origin: value.CORS_ORIGIN,
     },
+    apiKey: value.API_KEY,
   };
 }
